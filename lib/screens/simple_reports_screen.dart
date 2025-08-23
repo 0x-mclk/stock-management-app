@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/product_provider.dart';
-import '../models/sale.dart';
 import '../models/product                            color: product.stock < 5 
                                 ? Colors.red 
                                 : Colors.orange,rt';

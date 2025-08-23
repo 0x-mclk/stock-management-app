@@ -19,13 +19,13 @@ class MainScreen extends StatelessWidget {
         return Scaffold(
           body: IndexedStack(
             index: appProvider.currentPageIndex,
-            children: [
-              const DashboardScreen(),
-              const ProductsScreen(),
-              const SalesScreen(),
-              const SuppliersScreen(),
-              const ReportsScreen(),
-              const SettingsScreen(),
+            children: const [
+              DashboardScreen(),
+              ProductsScreen(),
+              SalesScreen(),
+              SuppliersScreen(),
+              ReportsScreen(),
+              SettingsScreen(),
             ],
           ),
           bottomNavigationBar: Consumer<NotificationProvider>(

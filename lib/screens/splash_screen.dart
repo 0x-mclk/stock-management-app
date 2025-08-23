@@ -52,11 +52,11 @@ class _SplashScreenState extends State<SplashScreen> {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => Scaffold(
+            builder: (context) => const Scaffold(
               body: Column(
                 children: [
-                  const OfflineStatusWidget(),
-                  const Expanded(child: MainScreen()),
+                  OfflineStatusWidget(),
+                  Expanded(child: MainScreen()),
                 ],
               ),
             ),
@@ -69,11 +69,11 @@ class _SplashScreenState extends State<SplashScreen> {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => Scaffold(
+            builder: (context) => const Scaffold(
               body: Column(
                 children: [
-                  const OfflineStatusWidget(),
-                  const Expanded(child: MainScreen()),
+                  OfflineStatusWidget(),
+                  Expanded(child: MainScreen()),
                 ],
               ),
             ),

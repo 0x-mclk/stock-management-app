@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class NotificationProvider extends ChangeNotifier {
-  List<AppNotification> _notifications = [];
+  final List<AppNotification> _notifications = [];
   bool _stockAlertsEnabled = true;
   bool _debtRemindersEnabled = true;
 

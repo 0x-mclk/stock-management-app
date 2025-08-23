@@ -26,7 +26,8 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // Satış listesi tarih filtreleme için
   DateTimeRange? _salesDateRange;
-  String _selectedDateFilter = 'Tümü'; // 'Tümü', 'Bugün', 'Bu Hafta', 'Bu Ay', 'Özel Aralık'
+  String _selectedDateFilter =
+      'Tümü'; // 'Tümü', 'Bugün', 'Bu Hafta', 'Bu Ay', 'Özel Aralık'
 
   @override
   void initState() {
@@ -792,7 +793,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                           ),
                         ],
                       );
-                    }).toList(),
+                    }),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -871,7 +872,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                         ],
                       ),
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
             ),
@@ -1132,7 +1133,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                           entry.key,
                           style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
-                        subtitle: Text('Satış Adedi'),
+                        subtitle: const Text('Satış Adedi'),
                         trailing: Text(
                           '${entry.value} adet',
                           style: const TextStyle(
@@ -1212,7 +1213,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   // Stok Durumu Sekmesi
   Widget _buildStockStatusTab(List<Product> products) {
     // Asgari stok seviyesi (varsayılan: 10)
-    final minStockLevel = 10;
+    const minStockLevel = 10;
     final lowStockProducts =
         products.where((p) => p.stock > 0 && p.stock <= minStockLevel).toList();
     final outOfStockProducts = products.where((p) => p.stock == 0).toList();
@@ -1326,11 +1327,11 @@ class _ReportsScreenState extends State<ReportsScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    const Row(
                       children: [
-                        const Icon(Icons.error, color: Colors.red),
-                        const SizedBox(width: 8),
-                        const Text(
+                        Icon(Icons.error, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text(
                           'Stokta Yok - Acil Tedarik Gerekli',
                           style: TextStyle(
                               fontSize: 16,
@@ -2007,8 +2008,9 @@ class _ReportsScreenState extends State<ReportsScreen>
                     itemBuilder: (context, index) {
                       final productsWithoutBarcode =
                           products.where((p) => p.barcode.isEmpty).toList();
-                      if (index >= productsWithoutBarcode.length)
+                      if (index >= productsWithoutBarcode.length) {
                         return const SizedBox.shrink();
+                      }
 
                       final product = productsWithoutBarcode[index];
 
@@ -2063,7 +2065,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             children: [
               // Tarih Seçici
               _buildDateRangeSelector(),
-              
+
               const Expanded(
                 child: Center(
                   child: Column(
@@ -2085,14 +2087,14 @@ class _ReportsScreenState extends State<ReportsScreen>
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         // Toplam satış tutarı
-        final totalSalesAmount =
-            filteredSales.fold<double>(0, (sum, sale) => sum + sale.finalAmount);
+        final totalSalesAmount = filteredSales.fold<double>(
+            0, (sum, sale) => sum + sale.finalAmount);
 
         return Column(
           children: [
             // Tarih Seçici
             _buildDateRangeSelector(),
-            
+
             // Filtre ve Sıralama Seçenekleri
             Container(
               padding: const EdgeInsets.all(16),
@@ -3136,7 +3138,8 @@ class _ReportsScreenState extends State<ReportsScreen>
                   DropdownMenuItem(value: 'Bugün', child: Text('Bugün')),
                   DropdownMenuItem(value: 'Bu Hafta', child: Text('Bu Hafta')),
                   DropdownMenuItem(value: 'Bu Ay', child: Text('Bu Ay')),
-                  DropdownMenuItem(value: 'Özel Aralık', child: Text('Özel Aralık')),
+                  DropdownMenuItem(
+                      value: 'Özel Aralık', child: Text('Özel Aralık')),
                 ],
                 onChanged: (value) {
                   setState(() {
@@ -3149,7 +3152,6 @@ class _ReportsScreenState extends State<ReportsScreen>
               ),
             ],
           ),
-          
           if (_selectedDateFilter == 'Özel Aralık') ...[
             const SizedBox(height: 12),
             Row(
@@ -3222,24 +3224,27 @@ class _ReportsScreenState extends State<ReportsScreen>
       case 'Bugün':
         final tomorrow = today.add(const Duration(days: 1));
         return sales.where((sale) {
-          return sale.createdAt.isAfter(today.subtract(const Duration(milliseconds: 1))) &&
-                 sale.createdAt.isBefore(tomorrow);
+          return sale.createdAt
+                  .isAfter(today.subtract(const Duration(milliseconds: 1))) &&
+              sale.createdAt.isBefore(tomorrow);
         }).toList();
 
       case 'Bu Hafta':
         final weekStart = today.subtract(Duration(days: today.weekday - 1));
         final weekEnd = weekStart.add(const Duration(days: 7));
         return sales.where((sale) {
-          return sale.createdAt.isAfter(weekStart.subtract(const Duration(milliseconds: 1))) &&
-                 sale.createdAt.isBefore(weekEnd);
+          return sale.createdAt.isAfter(
+                  weekStart.subtract(const Duration(milliseconds: 1))) &&
+              sale.createdAt.isBefore(weekEnd);
         }).toList();
 
       case 'Bu Ay':
         final monthStart = DateTime(now.year, now.month, 1);
         final monthEnd = DateTime(now.year, now.month + 1, 1);
         return sales.where((sale) {
-          return sale.createdAt.isAfter(monthStart.subtract(const Duration(milliseconds: 1))) &&
-                 sale.createdAt.isBefore(monthEnd);
+          return sale.createdAt.isAfter(
+                  monthStart.subtract(const Duration(milliseconds: 1))) &&
+              sale.createdAt.isBefore(monthEnd);
         }).toList();
 
       case 'Özel Aralık':
@@ -3258,8 +3263,10 @@ class _ReportsScreenState extends State<ReportsScreen>
           59,
         );
         return sales.where((sale) {
-          return sale.createdAt.isAfter(startDate.subtract(const Duration(milliseconds: 1))) &&
-                 sale.createdAt.isBefore(endDate.add(const Duration(milliseconds: 1)));
+          return sale.createdAt.isAfter(
+                  startDate.subtract(const Duration(milliseconds: 1))) &&
+              sale.createdAt
+                  .isBefore(endDate.add(const Duration(milliseconds: 1)));
         }).toList();
 
       default: // 'Tümü'

@@ -320,7 +320,7 @@ class _SalesScreenState extends State<SalesScreen> {
               Text('Ara Toplam: ₺${subtotal.toStringAsFixed(2)}'),
               if (discount > 0)
                 Text('-₺${discountAmount.toStringAsFixed(2)}',
-                    style: TextStyle(color: Colors.red)),
+                    style: const TextStyle(color: Colors.red)),
             ],
           ),
 

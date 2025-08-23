@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../providers/product_provider.dart';
 import '../providers/sales_provider.dart';
-import '../providers/supplier_provider.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
 

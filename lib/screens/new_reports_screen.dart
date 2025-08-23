@@ -582,11 +582,11 @@ class _ReportsScreenState extends State<ReportsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
                 Icon(Icons.warning, color: Colors.orange),
-                const SizedBox(width: 8),
-                const Text(
+                SizedBox(width: 8),
+                Text(
                   'Düşük Stok Ürünler',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
@@ -623,11 +623,11 @@ class _ReportsScreenState extends State<ReportsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
                 Icon(Icons.error, color: Colors.red),
-                const SizedBox(width: 8),
-                const Text(
+                SizedBox(width: 8),
+                Text(
                   'Tükenen Ürünler',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
@@ -639,7 +639,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             else
               ...outOfStockProducts.map(
                 (product) => ListTile(
-                  leading: CircleAvatar(
+                  leading: const CircleAvatar(
                     backgroundColor: Colors.red,
                     child: Icon(Icons.close, color: Colors.white),
                   ),

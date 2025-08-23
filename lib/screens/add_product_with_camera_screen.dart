@@ -415,7 +415,7 @@ class _AddProductWithCameraScreenState
                               size: 64,
                             ),
                             const SizedBox(height: 16),
-                            Text(
+                            const Text(
                               'Barkod Okundu!',
                               style: TextStyle(
                                 color: Colors.white,

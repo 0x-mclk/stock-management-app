@@ -18,7 +18,7 @@ class CartItem {
 }
 
 class SalesProvider extends ChangeNotifier {
-  List<CartItem> _cartItems = [];
+  final List<CartItem> _cartItems = [];
   List<Sale> _sales = [];
   String _paymentMethod = 'cash';
   double _totalDiscount = 0.0;

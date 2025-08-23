@@ -1,0 +1,120 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'providers/app_provider.dart';
+import 'providers/product_provider.dart';
+import 'providers/sales_provider.dart';
+import 'providers/supplier_provider.dart';
+import 'providers/notification_provider.dart';
+import 'providers/theme_provider.dart';
+import 'screens/splash_screen.dart';
+import 'services/database_service.dart';
+import 'services/notification_service.dart';
+import 'services/connectivity_service.dart';
+import 'services/offline_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize locale data for Turkish formatting
+  try {
+    await initializeDateFormatting('tr_TR', null);
+    await initializeDateFormatting('tr', null);
+    Intl.defaultLocale = 'tr_TR';
+    print('Turkish locale initialized successfully');
+  } catch (e) {
+    print('Locale initialization error: $e');
+    // Fallback to English if Turkish fails
+    try {
+      await initializeDateFormatting('en_US', null);
+      Intl.defaultLocale = 'en_US';
+    } catch (e2) {
+      print('Fallback locale initialization error: $e2');
+    }
+  }
+
+  // Initialize services (web'de database ve notification servisleri çalışmaz)
+  if (!kIsWeb) {
+    try {
+      // Initialize database first
+      await DatabaseService.instance.database;
+
+      // Initialize notification service
+      await NotificationService.initialize();
+
+      // Initialize connectivity and offline services (non-blocking)
+      ConnectivityService().initialize();
+
+      // Load pending operations in background
+      OfflineService().loadPendingOperations().catchError((error) {
+        debugPrint('Error loading pending operations: $error');
+      });
+    } catch (e) {
+      debugPrint('Error initializing services: $e');
+    }
+  }
+
+  runApp(const StockManagementApp());
+}
+
+class StockManagementApp extends StatelessWidget {
+  const StockManagementApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AppProvider()),
+        ChangeNotifierProvider(create: (_) => ProductProvider()),
+        ChangeNotifierProvider(create: (_) => SalesProvider()),
+        ChangeNotifierProvider(create: (_) => SupplierProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => ConnectivityService()),
+        ChangeNotifierProvider(create: (_) => OfflineService()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'Stok Takip',
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xFF2196F3),
+                brightness: themeProvider.isDarkMode
+                    ? Brightness.dark
+                    : Brightness.light,
+              ),
+              textTheme: GoogleFonts.robotoTextTheme(
+                themeProvider.isDarkMode
+                    ? ThemeData.dark().textTheme
+                    : ThemeData.light().textTheme,
+              ),
+              appBarTheme: AppBarTheme(
+                centerTitle: true,
+                elevation: 0,
+                backgroundColor: themeProvider.isDarkMode
+                    ? const Color(0xFF1E1E1E)
+                    : const Color(0xFF2196F3),
+                foregroundColor: Colors.white,
+              ),
+              bottomNavigationBarTheme: BottomNavigationBarThemeData(
+                backgroundColor: themeProvider.isDarkMode
+                    ? const Color(0xFF1E1E1E)
+                    : Colors.white,
+                selectedItemColor: const Color(0xFF2196F3),
+                unselectedItemColor: Colors.grey,
+                type: BottomNavigationBarType.fixed,
+              ),
+            ),
+            home: const SplashScreen(),
+          );
+        },
+      ),
+    );
+  }
+}

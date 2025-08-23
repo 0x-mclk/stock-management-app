@@ -1,0 +1,156 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../widgets/offline_status_widget.dart';
+import '../providers/product_provider.dart';
+import '../providers/sales_provider.dart';
+import '../providers/supplier_provider.dart';
+import 'main_screen.dart';
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    try {
+      // Show splash for minimum 2 seconds
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Load all provider data upfront to ensure data is available
+      debugPrint('Loading provider data...');
+
+      if (mounted) {
+        final productProvider =
+            Provider.of<ProductProvider>(context, listen: false);
+        final salesProvider =
+            Provider.of<SalesProvider>(context, listen: false);
+        final supplierProvider =
+            Provider.of<SupplierProvider>(context, listen: false);
+
+        // Load all data in parallel for faster initialization
+        await Future.wait([
+          productProvider.loadProducts(),
+          salesProvider.loadSales(),
+          supplierProvider.loadSuppliers(),
+        ]);
+
+        debugPrint('All provider data loaded successfully');
+      }
+
+      debugPrint('App initialized - navigating to main screen');
+
+      // Navigate to main screen
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => Scaffold(
+              body: Column(
+                children: [
+                  const OfflineStatusWidget(),
+                  const Expanded(child: MainScreen()),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Initialization error: $e');
+      // Even if there's an error, navigate to main screen
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => Scaffold(
+              body: Column(
+                children: [
+                  const OfflineStatusWidget(),
+                  const Expanded(child: MainScreen()),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).primaryColor,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // App Logo
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.inventory_2,
+                size: 60,
+                color: Color(0xFF2196F3),
+              ),
+            ),
+            const SizedBox(height: 30),
+
+            // App Title
+            const Text(
+              'Stok Takip',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Subtitle
+            Text(
+              'Yönetim Sistemi',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.white.withOpacity(0.8),
+              ),
+            ),
+            const SizedBox(height: 50),
+
+            // Loading Indicator
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+            const SizedBox(height: 20),
+
+            Text(
+              'Uygulama başlatılıyor...',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

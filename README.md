@@ -256,48 +256,48 @@ Modern ve kullanıcı dostu Flutter tabanlı stok takip uygulaması.
 
 ### Kod Yapısı
 
-\`\`\`
+```
 lib/
-├── main.dart # Ana uygulama başlangıcı
-├── models/ # Veri modelleri
-│ ├── product.dart # Ürün modeli
-│ ├── customer.dart # Müşteri modeli
-│ ├── supplier.dart # Tedarikçi modeli
-│ ├── sale.dart # Satış modeli
-│ └── cash_transaction.dart # Kasa işlem modeli
-├── providers/ # State management
-│ ├── app_provider.dart # Genel uygulama durumu
-│ ├── theme_provider.dart # Tema yönetimi
-│ ├── product_provider.dart # Ürün state management
-│ ├── customer_provider.dart # Müşteri state management
-│ ├── supplier_provider.dart # Tedarikçi state management
-│ ├── sales_provider.dart # Satış state management
-│ ├── cash_provider.dart # Kasa state management
-│ └── notification_provider.dart # Bildirim yönetimi
-├── screens/ # UI ekranları (20+ ekran)
-│ ├── main_screen.dart # Ana container ekranı
-│ ├── splash_screen.dart # Başlangıç ekranı
-│ ├── dashboard_screen.dart # Dashboard
-│ ├── products_screen.dart # Ürün yönetimi
-│ ├── sales_screen.dart # Satış POS ekranı
-│ ├── customers_screen.dart # Müşteri yönetimi
-│ ├── suppliers_screen.dart # Tedarikçi listesi
-│ ├── cash_screen.dart # Kasa yönetimi
-│ ├── reports_screen.dart # Raporlar
-│ ├── barcode_scanner_screen.dart # Barkod tarayıcı
-│ └── ... (diğer özel ekranlar)
-├── services/ # İş mantığı servisleri
-│ ├── database_service.dart # Veritabanı işlemleri
-│ ├── data_service.dart # Veri yönetimi
-│ ├── excel_service.dart # Excel import/export
-│ ├── notification_service.dart # Bildirim servisi
-│ ├── connectivity_service.dart # İnternet bağlantısı
-│ └── offline_service.dart # Offline mod
-├── utils/ # Yardımcı fonksiyonlar
-│ └── currency_formatter.dart # Para formatı
-└── widgets/ # Tekrar kullanılabilir bileşenler
-└── offline_status_widget.dart # Offline durum widget'ı
-\`\`\`
+├── main.dart                          # Ana uygulama başlangıcı
+├── models/                            # Veri modelleri
+│   ├── product.dart                   # Ürün modeli
+│   ├── customer.dart                  # Müşteri modeli
+│   ├── supplier.dart                  # Tedarikçi modeli
+│   ├── sale.dart                      # Satış modeli
+│   └── cash_transaction.dart          # Kasa işlem modeli
+├── providers/                         # State management
+│   ├── app_provider.dart              # Genel uygulama durumu
+│   ├── theme_provider.dart            # Tema yönetimi
+│   ├── product_provider.dart          # Ürün state management
+│   ├── customer_provider.dart         # Müşteri state management
+│   ├── supplier_provider.dart         # Tedarikçi state management
+│   ├── sales_provider.dart            # Satış state management
+│   ├── cash_provider.dart             # Kasa state management
+│   └── notification_provider.dart     # Bildirim yönetimi
+├── screens/                           # UI ekranları (20+ ekran)
+│   ├── main_screen.dart               # Ana container ekranı
+│   ├── splash_screen.dart             # Başlangıç ekranı
+│   ├── dashboard_screen.dart          # Dashboard
+│   ├── products_screen.dart           # Ürün yönetimi
+│   ├── sales_screen.dart              # Satış POS ekranı
+│   ├── customers_screen.dart          # Müşteri yönetimi
+│   ├── suppliers_screen.dart          # Tedarikçi listesi
+│   ├── cash_screen.dart               # Kasa yönetimi
+│   ├── reports_screen.dart            # Raporlar
+│   ├── barcode_scanner_screen.dart    # Barkod tarayıcı
+│   └── ... (diğer özel ekranlar)
+├── services/                          # İş mantığı servisleri
+│   ├── database_service.dart          # Veritabanı işlemleri
+│   ├── data_service.dart              # Veri yönetimi
+│   ├── excel_service.dart             # Excel import/export
+│   ├── notification_service.dart      # Bildirim servisi
+│   ├── connectivity_service.dart      # İnternet bağlantısı
+│   └── offline_service.dart           # Offline mod
+├── utils/                             # Yardımcı fonksiyonlar
+│   └── currency_formatter.dart        # Para formatı
+└── widgets/                           # Tekrar kullanılabilir bileşenler
+    └── offline_status_widget.dart     # Offline durum widget'ı
+```
 
 ## 🤝 Katkıda Bulunma
 

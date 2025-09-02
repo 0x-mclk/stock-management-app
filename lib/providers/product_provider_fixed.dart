@@ -28,7 +28,7 @@ class ProductProvider extends ChangeNotifier {
       _filterProducts();
       notifyListeners();
     } catch (e) {
-      print('Error loading products: $e');
+      // // Debug print removed // Removed for production
     } finally {
       setLoading(false);
     }
@@ -52,7 +52,7 @@ class ProductProvider extends ChangeNotifier {
       await _dataService.saveProduct(product);
       await refreshProducts(); // Force refresh to get updated data
     } catch (e) {
-      print('Error adding product: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -67,7 +67,7 @@ class ProductProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error updating product: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -79,7 +79,7 @@ class ProductProvider extends ChangeNotifier {
       _filterProducts();
       notifyListeners();
     } catch (e) {
-      print('Error removing product: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -143,3 +143,7 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 }
+
+
+
+

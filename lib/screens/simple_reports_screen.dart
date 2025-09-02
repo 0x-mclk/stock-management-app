@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/product_provider.dart';
-import '../models/product                            color: product.stock < 5 
-                                ? Colors.red 
-                                : Colors.orange,rt';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -228,13 +225,13 @@ class _ReportsScreenState extends State<ReportsScreen>
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: product.stockQuantity < 5 
+                              color: product.stock < 5 
                                   ? Colors.red 
                                   : Colors.orange,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              '${product.stockQuantity}',
+                              '${product.stock}',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -270,11 +267,11 @@ class _ReportsScreenState extends State<ReportsScreen>
         final products = productProvider.products;
         final totalStock = products.fold<int>(
           0,
-          (sum, product) => sum + product.stockQuantity,
+          (sum, product) => sum + product.stock,
         );
         final totalValue = products.fold<double>(
           0.0,
-          (sum, product) => sum + (product.purchasePrice * product.stockQuantity),
+          (sum, product) => sum + ((product.purchasePrice ?? 0) * product.stock),
         );
 
         return Padding(
@@ -334,13 +331,13 @@ class _ReportsScreenState extends State<ReportsScreen>
                   itemCount: products.length,
                   itemBuilder: (context, index) {
                     final product = products[index];
-                    final stockValue = product.purchasePrice * product.stockQuantity;
+                    final stockValue = (product.purchasePrice ?? 0) * product.stock;
                     
                     return Card(
                       child: ListTile(
                         title: Text(product.name),
                         subtitle: Text(
-                          'Alış: ₺${product.purchasePrice.toStringAsFixed(2)} - '
+                          'Alış: ₺${(product.purchasePrice ?? 0).toStringAsFixed(2)} - '
                           'Satış: ₺${product.salePrice.toStringAsFixed(2)}',
                         ),
                         trailing: Column(
@@ -348,7 +345,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              'Stok: ${product.stockQuantity}',
+                              'Stok: ${product.stock}',
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             Text(
@@ -372,3 +369,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 }
+
+
+
+

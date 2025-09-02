@@ -188,8 +188,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: hasDebt
-                      ? Colors.orange.withOpacity(0.2)
-                      : Colors.blue.withOpacity(0.1),
+                      ? Colors.orange.withValues(alpha: 0.2)
+                      : Colors.blue.withValues(alpha: 0.1),
                   width: 1,
                 ),
               ),
@@ -326,7 +326,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                       padding: const EdgeInsets.symmetric(
                           vertical: 8, horizontal: 4),
                       decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(0.03),
+                        color: Colors.grey.withValues(alpha: 0.03),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
@@ -339,7 +339,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(4),
                                     decoration: BoxDecoration(
-                                      color: Colors.orange.withOpacity(0.1),
+                                      color: Colors.orange.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Icon(
@@ -374,7 +374,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
-                                    color: Colors.green.withOpacity(0.1),
+                                    color: Colors.green.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Icon(
@@ -845,3 +845,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     );
   }
 }
+
+
+
+

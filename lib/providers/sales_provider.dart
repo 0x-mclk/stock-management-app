@@ -47,7 +47,7 @@ class SalesProvider extends ChangeNotifier {
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
-      print('Error loading sales: $e');
+      // // Debug print removed // Removed for production
     } finally {
       setLoading(false);
     }
@@ -120,19 +120,19 @@ class SalesProvider extends ChangeNotifier {
 
   Future<void> addSale(Sale sale) async {
     try {
-      print('🚀 SalesProvider.addSale çağrıldı');
-      print('📦 Gelen Sale objesi items sayısı: ${sale.items.length}');
+      // // Debug print removed // Removed for production
+      // // Debug print removed // Removed for production
       if (sale.items.isNotEmpty) {
         for (int i = 0; i < sale.items.length; i++) {
           final item = sale.items[i];
-          print('  ${i + 1}. ${item.productName} x${item.quantity}');
+          // // Debug print removed // Removed for production
         }
       }
 
       await _dataService.saveSale(sale);
       await refreshSales(); // Force refresh to get updated data
     } catch (e) {
-      print('Error adding sale: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -146,7 +146,7 @@ class SalesProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error updating sale: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -157,7 +157,7 @@ class SalesProvider extends ChangeNotifier {
       _sales.removeWhere((sale) => sale.id == saleId);
       notifyListeners();
     } catch (e) {
-      print('Error deleting sale: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -184,3 +184,7 @@ class SalesProvider extends ChangeNotifier {
     }).toList();
   }
 }
+
+
+
+

@@ -181,8 +181,7 @@ class DatabaseService {
       await db.delete('customers');
       await db.delete('suppliers');
       await db.delete('products');
-      print(
-          'All existing sample data cleared - fresh start for user data only');
+      // Debug print removed
     }
     if (oldVersion < 7) {
       // Add missing supplier columns
@@ -192,7 +191,7 @@ class DatabaseService {
           'ALTER TABLE suppliers ADD COLUMN monthly_purchases REAL DEFAULT 0');
       await db.execute(
           'ALTER TABLE suppliers ADD COLUMN yearly_purchases REAL DEFAULT 0');
-      print('Added missing supplier purchase tracking columns');
+      // // Debug print removed // Removed for production
     }
     if (oldVersion < 8) {
       // Clear all data due to schema inconsistencies and data contamination
@@ -202,7 +201,7 @@ class DatabaseService {
       await db.delete('sales');
       await db.delete('suppliers');
       await db.delete('products');
-      print('Database cleared to fix data contamination issues - fresh start');
+      // // Debug print removed // Removed for production
     }
   }
 
@@ -271,7 +270,7 @@ class DatabaseService {
     await db.delete('suppliers');
     await db.delete('products');
 
-    print('All user data cleared from database');
+    // // Debug print removed // Removed for production
   }
 
   // Reset database completely (including structure)
@@ -293,11 +292,15 @@ class DatabaseService {
     final file = io.File(path);
     if (await file.exists()) {
       await file.delete();
-      print('Database file deleted');
+      // // Debug print removed // Removed for production
     }
 
     // Reinitialize database
     _database = await _initDatabase();
-    print('Database recreated');
+    // // Debug print removed // Removed for production
   }
 }
+
+
+
+

@@ -861,17 +861,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
           await productProvider.addProduct(product);
           importedCount++;
-          print('DEBUG: Ürün eklendi: ${product.name}'); // Debug
+          // // Debug print removed // Removed for production // Debug
         } catch (e) {
-          print('DEBUG: Ürün eklenirken hata: $e'); // Debug
+          // // Debug print removed // Removed for production // Debug
           errorCount++;
         }
       }
 
       // Import sonrası ürün listesini yeniden yükle
       await productProvider.loadProducts();
-      print(
-          'DEBUG: İmport sonrası toplam ürün: ${productProvider.products.length}'); // Debug
+      // Debug print removed // Debug
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -893,7 +892,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           Provider.of<ProductProvider>(context, listen: false);
       final products = productProvider.products;
 
-      print('DEBUG: Toplam ürün sayısı: ${products.length}'); // Debug
+      // // Debug print removed // Removed for production // Debug
 
       if (products.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -932,7 +931,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
         final product = products[i];
         final rowIndex = i + 2; // 2'den başla (1. satır başlık)
 
-        print('DEBUG: Ürün ${i + 1}: ${product.name}'); // Debug
+        // // Debug print removed // Removed for production // Debug
 
         sheetObject.cell(CellIndex.indexByString('A$rowIndex')).value =
             TextCellValue(product.name);
@@ -967,14 +966,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
       String fileName = 'urunler_${DateTime.now().millisecondsSinceEpoch}.xlsx';
       String filePath = '${directory?.path}/$fileName';
 
-      print('DEBUG: Dosya kaydediliyor: $filePath'); // Debug
+      // // Debug print removed // Removed for production // Debug
 
       List<int>? fileBytes = excel.save();
       if (fileBytes != null) {
         File file = File(filePath);
         await file.writeAsBytes(fileBytes);
 
-        print('DEBUG: Dosya boyutu: ${fileBytes.length} bytes'); // Debug
+        // // Debug print removed // Removed for production // Debug
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -999,3 +998,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 }
+
+
+
+

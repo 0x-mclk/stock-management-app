@@ -17,7 +17,7 @@ class SupplierProvider extends ChangeNotifier {
       _suppliers = await _dataService.loadSuppliers();
       notifyListeners();
     } catch (e) {
-      print('Error loading suppliers: $e');
+      // // Debug print removed // Removed for production
     } finally {
       setLoading(false);
     }
@@ -36,7 +36,7 @@ class SupplierProvider extends ChangeNotifier {
       // Veritabanından güncel veriyi yükle
       await loadSuppliers();
     } catch (e) {
-      print('Error adding supplier: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -50,7 +50,7 @@ class SupplierProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error updating supplier: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -61,7 +61,7 @@ class SupplierProvider extends ChangeNotifier {
       _suppliers.removeWhere((s) => s.id == supplierId);
       notifyListeners();
     } catch (e) {
-      print('Error removing supplier: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -101,7 +101,7 @@ class SupplierProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error making payment: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -123,7 +123,7 @@ class SupplierProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error adding purchase: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -151,7 +151,7 @@ class SupplierProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error adding debt: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -177,7 +177,7 @@ class SupplierProvider extends ChangeNotifier {
 
       await _dataService.insert('payment_history', paymentData);
     } catch (e) {
-      print('Error saving payment history: $e');
+      // // Debug print removed // Removed for production
     }
   }
 
@@ -192,8 +192,12 @@ class SupplierProvider extends ChangeNotifier {
         orderBy: 'created_at DESC',
       );
     } catch (e) {
-      print('Error getting payment history: $e');
+      // // Debug print removed // Removed for production
       return [];
     }
   }
 }
+
+
+
+

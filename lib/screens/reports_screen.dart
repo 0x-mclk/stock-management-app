@@ -2882,7 +2882,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                           xValueMapper: (entry, _) => entry.key,
                           yValueMapper: (entry, _) => entry.value,
                           name: 'Ciro',
-                          color: Colors.green.withOpacity(0.3),
+                          color: Colors.green.withValues(alpha: 0.3),
                           borderColor: Colors.green,
                           borderWidth: 2,
                         ),
@@ -3274,3 +3274,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
   }
 }
+
+
+
+

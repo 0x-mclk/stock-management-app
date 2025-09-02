@@ -91,7 +91,7 @@ class _SalesScreenState extends State<SalesScreen> {
         color: Theme.of(context).cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
+            color: Colors.grey.withValues(alpha: 0.2),
             spreadRadius: 1,
             blurRadius: 5,
           ),
@@ -158,7 +158,7 @@ class _SalesScreenState extends State<SalesScreen> {
         // Sepet Başlığı
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: Theme.of(context).primaryColor.withOpacity(0.1),
+          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
           child: Row(
             children: [
               const Text(
@@ -304,7 +304,7 @@ class _SalesScreenState extends State<SalesScreen> {
         color: Theme.of(context).cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
+            color: Colors.grey.withValues(alpha: 0.2),
             spreadRadius: 1,
             blurRadius: 5,
           ),
@@ -598,19 +598,18 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _completeSale(double total) {
-    print('🔍 SATIŞ TAMAMLAMA DEBUG:');
-    print('CartItems sayısı: ${cartItems.length}');
+    // // Debug print removed // Removed for production
+    // // Debug print removed // Removed for production
 
     if (cartItems.isEmpty) {
-      print('❌ Sepet boş, satış yapılamaz!');
+      // // Debug print removed // Removed for production
       return;
     }
 
-    print('📦 Sepetteki ürünler:');
+    // // Debug print removed // Removed for production
     for (int i = 0; i < cartItems.length; i++) {
       final item = cartItems[i];
-      print(
-          '  ${i + 1}. ${item.productName} x${item.quantity} - ${item.unitPrice}₺');
+      // Debug print removed
     }
 
     final sale = Sale(
@@ -622,7 +621,7 @@ class _SalesScreenState extends State<SalesScreen> {
       createdAt: DateTime.now(),
     );
 
-    print('💾 Sale nesnesi oluşturuldu, items sayısı: ${sale.items.length}');
+    // // Debug print removed // Removed for production
 
     // Satış işlemini kaydet
     context.read<SalesProvider>().addSale(sale);
@@ -691,3 +690,7 @@ class _SalesScreenState extends State<SalesScreen> {
     // Gerçek implementasyonda printing paketi kullanılacak
   }
 }
+
+
+
+

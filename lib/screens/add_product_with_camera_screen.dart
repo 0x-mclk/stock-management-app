@@ -585,3 +585,7 @@ class _AddProductWithCameraScreenState
     );
   }
 }
+
+
+
+

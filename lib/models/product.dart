@@ -98,3 +98,7 @@ class Product {
 
   bool get isLowStock => stock <= minStock;
 }
+
+
+
+

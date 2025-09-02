@@ -22,7 +22,7 @@ class DataService {
       );
       return maps.map((map) => Product.fromMap(map)).toList();
     } catch (e) {
-      print('Error loading products: $e');
+      // // Debug print removed // Removed for production
       return [];
     }
   }
@@ -43,7 +43,7 @@ class DataService {
         );
       }
     } catch (e) {
-      print('Error saving product: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -56,7 +56,7 @@ class DataService {
         whereArgs: [productId],
       );
     } catch (e) {
-      print('Error deleting product: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -88,36 +88,36 @@ class DataService {
 
       return sales;
     } catch (e) {
-      print('Error loading sales: $e');
+      // // Debug print removed // Removed for production
       return [];
     }
   }
 
   Future<void> saveSale(Sale sale) async {
     try {
-      print('🔍 DataService.saveSale çağrıldı');
-      print('📦 Alınan Sale objesi items sayısı: ${sale.items.length}');
+      // // Debug print removed // Removed for production
+      // // Debug print removed // Removed for production
       if (sale.items.isNotEmpty) {
         for (int i = 0; i < sale.items.length; i++) {
           final item = sale.items[i];
-          print('  ${i + 1}. ${item.productName} x${item.quantity}');
+          // // Debug print removed // Removed for production
         }
       }
 
       if (sale.id?.isEmpty ?? true) {
         // Items'ları korumak için listeyi önceden kopyalayalım
         final itemsToSave = List<SaleItem>.from(sale.items);
-        print('� Items korundu, sayı: ${itemsToSave.length}');
+        // // Debug print removed // Removed for production
 
         // Insert new sale
         final saleMap = sale.toMap();
-        print('�️ saleMap oluşturuldu');
+        // // Debug print removed // Removed for production
 
         saleMap.remove('id'); // Yeni satışlarda ID çıkarılır
         final saleId = await _databaseService.insert('sales', saleMap);
 
-        print('🆕 YENİ SATIŞ KAYDI: ID=$saleId');
-        print('📦 Kaydedilecek ürün sayısı: ${itemsToSave.length}');
+        // // Debug print removed // Removed for production
+        // // Debug print removed // Removed for production
 
         // Insert sale items
         for (final item in itemsToSave) {
@@ -125,11 +125,10 @@ class DataService {
           itemMap['sale_id'] = saleId.toString();
           itemMap.remove('id'); // SaleItem ID'si de çıkarılır
           await _databaseService.insert('sale_items', itemMap);
-          print(
-              '  ✅ SaleItem kaydedildi: ${item.productName} x${item.quantity}');
+          // Debug print removed
         }
 
-        print('🎉 Tüm SaleItem\'lar başarıyla kaydedildi!');
+        // // Debug print removed // Removed for production
       } else {
         // Update existing sale
         await _databaseService.update(
@@ -153,7 +152,7 @@ class DataService {
         }
       }
     } catch (e) {
-      print('Error saving sale: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -182,7 +181,7 @@ class DataService {
         await _databaseService.insert('sale_items', itemMap);
       }
     } catch (e) {
-      print('Error updating sale: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -203,7 +202,7 @@ class DataService {
         whereArgs: [saleId],
       );
     } catch (e) {
-      print('Error deleting sale: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -215,7 +214,7 @@ class DataService {
           await _databaseService.query('suppliers', orderBy: 'created_at DESC');
       return maps.map((map) => Supplier.fromMap(map)).toList();
     } catch (e) {
-      print('Error loading suppliers: $e');
+      // // Debug print removed // Removed for production
       return [];
     }
   }
@@ -235,7 +234,7 @@ class DataService {
         );
       }
     } catch (e) {
-      print('Error saving supplier: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -248,7 +247,7 @@ class DataService {
         whereArgs: [supplierId],
       );
     } catch (e) {
-      print('Error deleting supplier: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -259,7 +258,7 @@ class DataService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('app_settings', jsonEncode(settings));
     } catch (e) {
-      print('Error saving settings: $e');
+      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -273,7 +272,7 @@ class DataService {
       }
       return {};
     } catch (e) {
-      print('Error loading settings: $e');
+      // // Debug print removed // Removed for production
       return {};
     }
   }
@@ -293,7 +292,7 @@ class DataService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('has_unsynced_data', false);
     } catch (e) {
-      print('Error marking data as synced: $e');
+      // // Debug print removed // Removed for production
     }
   }
 
@@ -302,42 +301,42 @@ class DataService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('has_unsynced_data', true);
     } catch (e) {
-      print('Error marking data as unsynced: $e');
+      // // Debug print removed // Removed for production
     }
   }
 
   // Debug method to check database content
   Future<void> debugDatabaseContent() async {
     try {
-      print('=== DATABASE DEBUG START ===');
+      // // Debug print removed // Removed for production
 
       // Check sales table structure
       final salesColumns =
           await _databaseService.rawQuery('PRAGMA table_info(sales)');
-      print('Sales table columns: $salesColumns');
+      // // Debug print removed // Removed for production
 
       // Check if supplier_id column exists
       final hasSupplierColumn =
           salesColumns.any((col) => col['name'] == 'supplier_id');
-      print('Has supplier_id column: $hasSupplierColumn');
+      // // Debug print removed // Removed for production
 
       // Check all sales data
       final sales = await _databaseService.query('sales');
-      print('Sales count: ${sales.length}');
+      // // Debug print removed // Removed for production
       for (final sale in sales) {
-        print('Sale: $sale');
+        // // Debug print removed // Removed for production
       }
 
       // Check sale items
       final saleItems = await _databaseService.query('sale_items');
-      print('Sale items count: ${saleItems.length}');
+      // // Debug print removed // Removed for production
       for (final item in saleItems) {
-        print('Sale item: $item');
+        // // Debug print removed // Removed for production
       }
 
-      print('=== DATABASE DEBUG END ===');
+      // // Debug print removed // Removed for production
     } catch (e) {
-      print('Error debugging database: $e');
+      // // Debug print removed // Removed for production
     }
   }
 
@@ -381,3 +380,7 @@ class DataService {
         where: where, whereArgs: whereArgs);
   }
 }
+
+
+
+

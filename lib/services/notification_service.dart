@@ -11,7 +11,7 @@ class NotificationService {
     String? payload,
   }) async {
     // Notification implementation
-    print('Notification: $title - $body');
+    // // Debug print removed // Removed for production
   }
 
   static Future<void> showLowStockNotification(String productName, int stock) async {
@@ -30,3 +30,7 @@ class NotificationService {
     );
   }
 }
+
+
+
+

@@ -880,3 +880,7 @@ class ProductAnalysisData {
     required this.totalProfit,
   });
 }
+
+
+
+

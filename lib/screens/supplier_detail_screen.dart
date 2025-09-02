@@ -449,14 +449,14 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             spreadRadius: 1,
             blurRadius: 3,
             offset: const Offset(0, 2),
           ),
         ],
         border: Border.all(
-          color: color.withOpacity(0.2),
+          color: color.withValues(alpha: 0.2),
           width: 1,
         ),
       ),
@@ -470,7 +470,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
             Container(
               padding: const EdgeInsets.all(6), // İkon padding'ini azalttım
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
               child:
@@ -984,7 +984,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -1130,7 +1130,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -2291,3 +2291,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
     );
   }
 }
+
+
+
+

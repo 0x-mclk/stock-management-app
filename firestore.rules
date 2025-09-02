@@ -1,0 +1,122 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users collection - users can access their own data, create on registration
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Stores collection - store members can read, only owner can write
+    match /stores/{storeId} {
+      // Allow create when user sets themselves as owner
+      allow create: if request.auth != null 
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['name', 'ownerId', 'isActive', 'createdAt']);
+
+      // Allow read for authenticated users (needed to check membership and invitations)
+      allow read: if request.auth != null;
+      
+      // Allow update/delete when user is owner
+      allow update, delete: if request.auth != null 
+        && request.auth.uid == resource.data.ownerId;
+    }
+    
+    // Products collection - store members can read/write
+    match /stores/{storeId}/products/{productId} {
+      // Allow read/write for store owner and members
+      allow read, write: if request.auth != null && 
+        (isStoreOwnerSafe(storeId) || isStoreMember(storeId));
+    }
+    
+    // Sales collection - store members can read/write
+    match /stores/{storeId}/sales/{saleId} {
+      // Allow read/write for store owner and members
+      allow read, write: if request.auth != null && 
+        (isStoreOwnerSafe(storeId) || isStoreMember(storeId));
+    }
+    
+    // Store members sub-collection - real members system
+    match /stores/{storeId}/members/{memberId} {
+      // Allow read if user is authenticated and one of:
+      // 1. Store owner, 2. Member themselves, 3. Email matches (for invitations)
+      allow read: if request.auth != null && 
+        (isStoreOwnerSafe(storeId) || 
+         request.auth.uid == memberId ||
+         (resource != null && request.auth.token.email == resource.data.email));
+      
+      // Allow create/write for store owner creating invitations and managing members
+      allow create, write: if request.auth != null && 
+        isStoreOwnerSafe(storeId);
+      
+      // Allow update for:
+      // 1. Store owner managing members
+      // 2. Users accepting/rejecting their own invitations
+      allow update: if request.auth != null && 
+        (isStoreOwnerSafe(storeId) || 
+         (request.auth.uid == memberId && 
+          request.resource.data.status in ['accepted', 'rejected']) ||
+         (resource != null && request.auth.token.email == resource.data.email &&
+          request.resource.data.status in ['accepted', 'rejected']));
+      
+      // Allow delete for store owner removing members
+      allow delete: if request.auth != null && 
+        isStoreOwnerSafe(storeId);
+    }
+
+    // Real-time data collection for live features
+    match /stores/{storeId}/realtime_data/{dataId} {
+      allow read, write: if request.auth != null && 
+        (isStoreOwnerSafe(storeId) || isStoreMember(storeId));
+    }
+
+    // User presence tracking
+    match /stores/{storeId}/user_presence/{userId} {
+      allow read, write: if request.auth != null && 
+        (isStoreOwnerSafe(storeId) || isStoreMember(storeId));
+    }
+    
+    // Store invitations - users can read their own invitations
+    match /store_invitations/{invitationId} {
+      allow read: if request.auth != null && 
+                     request.auth.token.email == resource.data.inviteeEmail;
+      allow write: if request.auth != null && isStoreOwner(resource.data.storeId);
+    }
+    
+    // Admin controls - public read for banned users check, admin write
+    match /admin_controls/{document} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    
+    // Helper functions
+    function isStoreOwnerSafe(storeId) {
+      // Safe store owner check with null validation
+      let storeDoc = get(/databases/$(database)/documents/stores/$(storeId));
+      return storeDoc != null && 
+             storeDoc.data != null && 
+             storeDoc.data.ownerId != null && 
+             storeDoc.data.ownerId == request.auth.uid;
+    }
+    
+    function getStoreOwnerId(storeId) {
+      return get(/databases/$(database)/documents/stores/$(storeId)).data.ownerId;
+    }
+    
+    function isStoreMember(storeId) {
+      return request.auth != null && 
+             exists(/databases/$(database)/documents/stores/$(storeId)/members/$(request.auth.uid));
+    }
+    
+    function isStoreOwner(storeId) {
+      return request.auth != null && 
+             request.auth.uid == getStoreOwnerId(storeId);
+    }
+    
+    function isAdmin() {
+      return request.auth != null && 
+             request.auth.token.email in ['mhmmdclk97@gmail.com', 'admin@stoktakip.com'];
+    }
+  }
+}

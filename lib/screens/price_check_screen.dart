@@ -432,3 +432,7 @@ class _PriceCheckScreenState extends State<PriceCheckScreen> {
     );
   }
 }
+
+
+
+

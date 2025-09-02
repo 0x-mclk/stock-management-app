@@ -24,7 +24,7 @@ class OfflineService extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('Offline operations yüklenirken hata: $e');
+      // Debug print removed
     }
   }
 
@@ -35,7 +35,7 @@ class OfflineService extends ChangeNotifier {
       await prefs.setString('pending_operations', operationsJson);
       notifyListeners();
     } catch (e) {
-      debugPrint('Offline operations kaydedilirken hata: $e');
+      // Debug print removed
     }
   }
 
@@ -103,7 +103,7 @@ class OfflineService extends ChangeNotifier {
 
       return true;
     } catch (e) {
-      debugPrint('Senkronizasyon hatası: $e');
+      // Debug print removed
       return false;
     }
   }
@@ -213,3 +213,7 @@ class OfflineService extends ChangeNotifier {
     }
   }
 }
+
+
+
+

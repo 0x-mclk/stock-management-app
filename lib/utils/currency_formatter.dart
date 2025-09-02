@@ -98,3 +98,7 @@ class CurrencyFormatter {
     return double.tryParse(standardFormat) ?? 0.0;
   }
 }
+
+
+
+

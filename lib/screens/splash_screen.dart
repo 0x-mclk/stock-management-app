@@ -26,7 +26,7 @@ class _SplashScreenState extends State<SplashScreen> {
       await Future.delayed(const Duration(seconds: 2));
 
       // Load all provider data upfront to ensure data is available
-      debugPrint('Loading provider data...');
+      // Debug print removed
 
       if (mounted) {
         final productProvider =
@@ -43,10 +43,10 @@ class _SplashScreenState extends State<SplashScreen> {
           supplierProvider.loadSuppliers(),
         ]);
 
-        debugPrint('All provider data loaded successfully');
+        // Debug print removed
       }
 
-      debugPrint('App initialized - navigating to main screen');
+      // Debug print removed
 
       // Navigate to main screen
       if (mounted) {
@@ -64,7 +64,7 @@ class _SplashScreenState extends State<SplashScreen> {
         );
       }
     } catch (e) {
-      debugPrint('Initialization error: $e');
+      // Debug print removed
       // Even if there's an error, navigate to main screen
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -100,7 +100,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),
@@ -130,7 +130,7 @@ class _SplashScreenState extends State<SplashScreen> {
               'Yönetim Sistemi',
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.white.withValues(alpha: 0.8),
               ),
             ),
             const SizedBox(height: 50),
@@ -145,7 +145,7 @@ class _SplashScreenState extends State<SplashScreen> {
               'Uygulama başlatılıyor...',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.white.withOpacity(0.7),
+                color: Colors.white.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -154,3 +154,7 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 }
+
+
+
+

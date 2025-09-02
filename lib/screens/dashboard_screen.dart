@@ -29,9 +29,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       // Don't load any data initially - let each screen load its own data when needed
       // This prevents memory overload at startup
-      debugPrint('Dashboard initialized - data will load on demand');
+      // Debug print removed
     } catch (e) {
-      debugPrint('Error loading dashboard data: $e');
+      // Debug print removed
     }
   }
 
@@ -209,7 +209,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             gradient: LinearGradient(
-              colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
+              colors: [color.withValues(alpha: 0.1), color.withValues(alpha: 0.05)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -421,3 +421,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+
+
+
+

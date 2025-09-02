@@ -101,3 +101,7 @@ class ConnectivityService extends ChangeNotifier {
     return _isOnline ? Colors.green : Colors.red;
   }
 }
+
+
+
+

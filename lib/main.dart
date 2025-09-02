@@ -24,15 +24,15 @@ void main() async {
     await initializeDateFormatting('tr_TR', null);
     await initializeDateFormatting('tr', null);
     Intl.defaultLocale = 'tr_TR';
-    print('Turkish locale initialized successfully');
+    // Debug: print('Turkish locale initialized');
   } catch (e) {
-    print('Locale initialization error: $e');
+    // Debug: print('Turkish locale error: $e');
     // Fallback to English if Turkish fails
     try {
       await initializeDateFormatting('en_US', null);
       Intl.defaultLocale = 'en_US';
     } catch (e2) {
-      print('Fallback locale initialization error: $e2');
+      // Debug: print('English locale error: $e2');
     }
   }
 
@@ -50,10 +50,10 @@ void main() async {
 
       // Load pending operations in background
       OfflineService().loadPendingOperations().catchError((error) {
-        debugPrint('Error loading pending operations: $error');
+        // Debug: print('Error loading pending operations: $error');
       });
     } catch (e) {
-      debugPrint('Error initializing services: $e');
+      // Debug: print('Error in main: $e');
     }
   }
 
@@ -118,3 +118,7 @@ class StockManagementApp extends StatelessWidget {
     );
   }
 }
+
+
+
+

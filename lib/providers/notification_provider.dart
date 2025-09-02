@@ -32,6 +32,13 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void markAllAsRead() {
+    for (int i = 0; i < _notifications.length; i++) {
+      _notifications[i] = _notifications[i].copyWith(isRead: true);
+    }
+    notifyListeners();
+  }
+
   void setStockAlertsEnabled(bool enabled) {
     _stockAlertsEnabled = enabled;
     notifyListeners();
@@ -79,6 +86,8 @@ class AppNotification {
       isRead: isRead ?? this.isRead,
     );
   }
+
+  bool get isStockNotification => type == NotificationType.lowStock;
 }
 
 enum NotificationType {
@@ -86,3 +95,7 @@ enum NotificationType {
   debt,
   general,
 }
+
+
+
+

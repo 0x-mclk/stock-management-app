@@ -118,7 +118,3 @@ class StockManagementApp extends StatelessWidget {
     );
   }
 }
-
-
-
-

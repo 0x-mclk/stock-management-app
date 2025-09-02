@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../models/invitation_model.dart';
 
 class InvitationService {
@@ -51,10 +51,10 @@ class InvitationService {
       final docRef =
           await _getMembersCollection(storeId).add(invitation.toFirestore());
 
-      // Debug print removed
+      debugPrint('✅ Invitation sent: ${docRef.id} to $email');
       return docRef.id;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error sending invitation: $e');
       return null;
     }
   }
@@ -74,10 +74,10 @@ class InvitationService {
         'lastActivity': FieldValue.serverTimestamp(),
       });
 
-      // Debug print removed
+      debugPrint('✅ Invitation accepted: $invitationId');
       return true;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error accepting invitation: $e');
       return false;
     }
   }
@@ -93,10 +93,10 @@ class InvitationService {
         'respondedAt': FieldValue.serverTimestamp(),
       });
 
-      // Debug print removed
+      debugPrint('✅ Invitation rejected: $invitationId');
       return true;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error rejecting invitation: $e');
       return false;
     }
   }
@@ -131,10 +131,10 @@ class InvitationService {
   }) async {
     try {
       await _getMembersCollection(storeId).doc(memberId).delete();
-      // Debug print removed
+      debugPrint('✅ Member removed: $memberId');
       return true;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error removing member: $e');
       return false;
     }
   }
@@ -149,10 +149,10 @@ class InvitationService {
         'isActive': false,
         'lastActivity': FieldValue.serverTimestamp(),
       });
-      // Debug print removed
+      debugPrint('✅ Member deactivated: $memberId');
       return true;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error deactivating member: $e');
       return false;
     }
   }
@@ -167,10 +167,10 @@ class InvitationService {
         'isActive': true,
         'lastActivity': FieldValue.serverTimestamp(),
       });
-      // Debug print removed
+      debugPrint('✅ Member reactivated: $memberId');
       return true;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error reactivating member: $e');
       return false;
     }
   }
@@ -189,10 +189,10 @@ class InvitationService {
             customPermissions ?? InvitationModel.getDefaultPermissions(newRole),
         'lastActivity': FieldValue.serverTimestamp(),
       });
-      // Debug print removed
+      debugPrint('✅ Member role updated: $memberId -> $newRole');
       return true;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error updating member role: $e');
       return false;
     }
   }
@@ -207,7 +207,7 @@ class InvitationService {
         'lastActivity': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error updating last activity: $e');
     }
   }
 
@@ -232,10 +232,10 @@ class InvitationService {
 
       final docRef = await _getMembersCollection(storeId)
           .add(ownerInvitation.toFirestore());
-      // Debug print removed
+      debugPrint('✅ Owner membership created: ${docRef.id}');
       return docRef.id;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error creating owner membership: $e');
       return null;
     }
   }
@@ -256,7 +256,7 @@ class InvitationService {
       }
       return null;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error getting user membership: $e');
       return null;
     }
   }
@@ -288,66 +288,8 @@ class InvitationService {
       ]).get();
       return snapshot.docs.length;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error getting member count: $e');
       return 0;
-    }
-  }
-
-  /// Check if email has pending accepted invitation
-  Future<InvitationModel?> checkAcceptedInvitation(String email) async {
-    try {
-      // Debug print removed
-
-      // Query all store_invitations collection for this email with accepted status
-      final querySnapshot = await _firestore
-          .collection('store_invitations')
-          .where('email', isEqualTo: email.toLowerCase())
-          .where('status',
-              isEqualTo: InvitationStatus.accepted.toString().split('.').last)
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        final doc = querySnapshot.docs.first;
-        final data = doc.data();
-        // Debug print removed
-
-        // Get store name from stores collection
-        String? storeName;
-        try {
-          final storeDoc =
-              await _firestore.collection('stores').doc(data['storeId']).get();
-          storeName = storeDoc.data()?['name'];
-        } catch (e) {
-          // Debug print removed
-          storeName = 'Bilinmeyen Mağaza';
-        }
-
-        return InvitationModel(
-          id: doc.id,
-          userId: data['userId'] ?? '',
-          email: data['email'],
-          storeId: data['storeId'],
-          storeName: storeName,
-          role: UserRole.values.firstWhere(
-            (role) => role.toString().split('.').last == data['role'],
-            orElse: () => UserRole.staff,
-          ),
-          permissions: List<String>.from(data['permissions'] ?? []),
-          status: InvitationStatus.accepted,
-          invitedAt: (data['invitedAt'] as Timestamp).toDate(),
-          invitedBy: data['invitedBy'],
-          respondedAt: data['respondedAt'] != null
-              ? (data['respondedAt'] as Timestamp).toDate()
-              : null,
-        );
-      }
-
-      // Debug print removed
-      return null;
-    } catch (e) {
-      // Debug print removed
-      return null;
     }
   }
 
@@ -358,15 +300,11 @@ class InvitationService {
   }) async {
     try {
       await _getMembersCollection(storeId).doc(invitationId).delete();
-      // Debug print removed
+      debugPrint('✅ Invitation cancelled: $invitationId');
       return true;
     } catch (e) {
-      // Debug print removed
+      debugPrint('❌ Error cancelling invitation: $e');
       return false;
     }
   }
 }
-
-
-
-

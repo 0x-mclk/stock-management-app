@@ -61,7 +61,7 @@ class _InvitePartnerScreenState extends State<InvitePartnerScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Hata: ${e.toString()}'),
+            content: Text('Hata: ${e.toString()}'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -144,9 +144,9 @@ class _InvitePartnerScreenState extends State<InvitePartnerScreen> {
                         const SizedBox(height: 8),
                         const Text(
                           'Mağazanıza yeni bir takım üyesi davet edin',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
-                            color: Colors.grey[600],
+                            color: Colors.grey,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -175,7 +175,8 @@ class _InvitePartnerScreenState extends State<InvitePartnerScreen> {
                       decoration: InputDecoration(
                         labelText: 'Email Adresi',
                         hintText: 'ornek@email.com',
-                        prefixIcon: const Icon(Icons.email, color: Color(0xFF1E88E5)),
+                        prefixIcon:
+                            const Icon(Icons.email, color: Color(0xFF1E88E5)),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -228,7 +229,7 @@ class _InvitePartnerScreenState extends State<InvitePartnerScreen> {
                             .where((role) => role != UserRole.owner)
                             .map(
                               (role) => RadioListTile<UserRole>(
-                                title: const Text(InvitationModel(
+                                title: Text(InvitationModel(
                                   userId: '',
                                   email: '',
                                   storeId: '',
@@ -237,7 +238,7 @@ class _InvitePartnerScreenState extends State<InvitePartnerScreen> {
                                   status: InvitationStatus.pending,
                                   invitedAt: DateTime.now(),
                                 ).roleDisplayName),
-                                subtitle: const Text(_getRoleDescription(role)),
+                                subtitle: Text(_getRoleDescription(role)),
                                 value: role,
                                 groupValue: _selectedRole,
                                 onChanged: (value) {
@@ -320,8 +321,3 @@ class _InvitePartnerScreenState extends State<InvitePartnerScreen> {
     }
   }
 }
-
-
-
-
-

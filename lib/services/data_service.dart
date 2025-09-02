@@ -99,7 +99,6 @@ class DataService {
       // // Debug print removed // Removed for production
       if (sale.items.isNotEmpty) {
         for (int i = 0; i < sale.items.length; i++) {
-          final item = sale.items[i];
           // // Debug print removed // Removed for production
         }
       }
@@ -316,21 +315,20 @@ class DataService {
       // // Debug print removed // Removed for production
 
       // Check if supplier_id column exists
-      final hasSupplierColumn =
-          salesColumns.any((col) => col['name'] == 'supplier_id');
+      salesColumns.any((col) => col['name'] == 'supplier_id');
       // // Debug print removed // Removed for production
 
       // Check all sales data
       final sales = await _databaseService.query('sales');
       // // Debug print removed // Removed for production
-      for (final sale in sales) {
+      for (int i = 0; i < sales.length; i++) {
         // // Debug print removed // Removed for production
       }
 
       // Check sale items
       final saleItems = await _databaseService.query('sale_items');
       // // Debug print removed // Removed for production
-      for (final item in saleItems) {
+      for (int i = 0; i < saleItems.length; i++) {
         // // Debug print removed // Removed for production
       }
 
@@ -380,7 +378,3 @@ class DataService {
         where: where, whereArgs: whereArgs);
   }
 }
-
-
-
-

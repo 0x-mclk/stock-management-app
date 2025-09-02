@@ -87,9 +87,12 @@ class _ReportsScreenState extends State<ReportsScreen>
                             children: [
                               Text(
                                 '$totalSales',
-                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: Theme.of(context).primaryColor,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context).primaryColor,
+                                    ),
                               ),
                               const Text('Toplam Satış'),
                             ],
@@ -98,9 +101,12 @@ class _ReportsScreenState extends State<ReportsScreen>
                             children: [
                               Text(
                                 '₺${totalRevenue.toStringAsFixed(2)}',
-                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: Colors.green,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      color: Colors.green,
+                                    ),
                               ),
                               const Text('Toplam Gelir'),
                             ],
@@ -179,9 +185,12 @@ class _ReportsScreenState extends State<ReportsScreen>
                             children: [
                               Text(
                                 '${products.length}',
-                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: Theme.of(context).primaryColor,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context).primaryColor,
+                                    ),
                               ),
                               const Text('Toplam Ürün'),
                             ],
@@ -190,9 +199,12 @@ class _ReportsScreenState extends State<ReportsScreen>
                             children: [
                               Text(
                                 '${lowStockProducts.length}',
-                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: Colors.orange,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      color: Colors.orange,
+                                    ),
                               ),
                               const Text('Düşük Stok'),
                             ],
@@ -225,8 +237,8 @@ class _ReportsScreenState extends State<ReportsScreen>
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: product.stock < 5 
-                                  ? Colors.red 
+                              color: product.stock < 5
+                                  ? Colors.red
                                   : Colors.orange,
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -271,7 +283,8 @@ class _ReportsScreenState extends State<ReportsScreen>
         );
         final totalValue = products.fold<double>(
           0.0,
-          (sum, product) => sum + ((product.purchasePrice ?? 0) * product.stock),
+          (sum, product) =>
+              sum + ((product.purchasePrice ?? 0) * product.stock),
         );
 
         return Padding(
@@ -296,9 +309,12 @@ class _ReportsScreenState extends State<ReportsScreen>
                             children: [
                               Text(
                                 '$totalStock',
-                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: Theme.of(context).primaryColor,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context).primaryColor,
+                                    ),
                               ),
                               const Text('Toplam Stok'),
                             ],
@@ -307,9 +323,12 @@ class _ReportsScreenState extends State<ReportsScreen>
                             children: [
                               Text(
                                 '₺${totalValue.toStringAsFixed(2)}',
-                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: Colors.green,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      color: Colors.green,
+                                    ),
                               ),
                               const Text('Stok Değeri'),
                             ],
@@ -331,8 +350,9 @@ class _ReportsScreenState extends State<ReportsScreen>
                   itemCount: products.length,
                   itemBuilder: (context, index) {
                     final product = products[index];
-                    final stockValue = (product.purchasePrice ?? 0) * product.stock;
-                    
+                    final stockValue =
+                        (product.purchasePrice ?? 0) * product.stock;
+
                     return Card(
                       child: ListTile(
                         title: Text(product.name),
@@ -346,7 +366,8 @@ class _ReportsScreenState extends State<ReportsScreen>
                           children: [
                             Text(
                               'Stok: ${product.stock}',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             Text(
                               '₺${stockValue.toStringAsFixed(2)}',
@@ -369,7 +390,3 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 }
-
-
-
-

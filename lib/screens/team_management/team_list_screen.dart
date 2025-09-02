@@ -103,8 +103,8 @@ class _TeamListScreenState extends State<TeamListScreen> {
                         const SizedBox(height: 4),
                         const Text(
                           'Mağaza takımınızı yönetin',
-                          style: const TextStyle(
-                            color: Colors.grey[600],
+                          style: TextStyle(
+                            color: Colors.grey,
                             fontSize: 14,
                           ),
                         ),
@@ -161,21 +161,21 @@ class _TeamListScreenState extends State<TeamListScreen> {
                           const Icon(
                             Icons.group_outlined,
                             size: 64,
-                            color: Colors.grey[400],
+                            color: Colors.grey,
                           ),
                           const SizedBox(height: 16),
                           const Text(
                             'Henüz takım üyesi yok',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
-                              color: Colors.grey[600],
+                              color: Colors.grey,
                             ),
                           ),
                           const SizedBox(height: 8),
                           const Text(
                             'İlk takım üyesini davet edin',
-                            style: const TextStyle(
-                              color: Colors.grey[500],
+                            style: TextStyle(
+                              color: Colors.grey,
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -233,7 +233,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
         contentPadding: const EdgeInsets.all(16),
         leading: CircleAvatar(
           backgroundColor: _getStatusColor(member.status),
-          child: const Text(
+          child: Text(
             member.email[0].toUpperCase(),
             style: const TextStyle(
               color: Colors.white,
@@ -241,7 +241,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
             ),
           ),
         ),
-        title: const Text(
+        title: Text(
           member.email,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
@@ -255,12 +255,13 @@ class _TeamListScreenState extends State<TeamListScreen> {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: Color(0xFF1E88E5).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
+                  child: Text(
                     member.roleDisplayName,
                     style: const TextStyle(
                       color: Color(0xFF1E88E5),
@@ -271,14 +272,16 @@ class _TeamListScreenState extends State<TeamListScreen> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(member.status).withValues(alpha: 0.1),
+                    color:
+                        _getStatusColor(member.status).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
+                  child: Text(
                     member.statusDisplayName,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: _getStatusColor(member.status),
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -289,10 +292,10 @@ class _TeamListScreenState extends State<TeamListScreen> {
             ),
             if (member.lastActivity != null) ...[
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Son aktiflik: ${_formatDate(member.lastActivity!)}',
                 style: const TextStyle(
-                  color: Colors.grey[500],
+                  color: Colors.grey,
                   fontSize: 12,
                 ),
               ),
@@ -463,8 +466,8 @@ class _TeamListScreenState extends State<TeamListScreen> {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text(title),
-            content: const Text(content),
+            title: Text(title),
+            content: Text(content),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -483,7 +486,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
   void _showResult(bool success, String successMessage, String errorMessage) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text(success ? successMessage : errorMessage),
+        content: Text(success ? successMessage : errorMessage),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
       ),
@@ -506,8 +509,3 @@ class _TeamListScreenState extends State<TeamListScreen> {
     }
   }
 }
-
-
-
-
-

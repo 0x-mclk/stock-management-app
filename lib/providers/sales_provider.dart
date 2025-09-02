@@ -124,7 +124,6 @@ class SalesProvider extends ChangeNotifier {
       // // Debug print removed // Removed for production
       if (sale.items.isNotEmpty) {
         for (int i = 0; i < sale.items.length; i++) {
-          final item = sale.items[i];
           // // Debug print removed // Removed for production
         }
       }
@@ -184,7 +183,3 @@ class SalesProvider extends ChangeNotifier {
     }).toList();
   }
 }
-
-
-
-

@@ -191,7 +191,3 @@ class InvitationModel {
     return id.hashCode ^ userId.hashCode ^ email.hashCode ^ storeId.hashCode;
   }
 }
-
-
-
-

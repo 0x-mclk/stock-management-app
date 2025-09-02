@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user_mode.dart';
 import '../models/auth_result.dart';
 
@@ -120,7 +120,7 @@ class FirebaseAuthService {
     } on FirebaseAuthException catch (e) {
       return AuthResult.failure(_getAuthErrorMessage(e.code));
     } catch (e) {
-      // Debug print removed
+      debugPrint('Registration error: $e');
       return AuthResult.failure('Kayıt sırasında bir hata oluştu');
     }
   }
@@ -219,7 +219,7 @@ class FirebaseAuthService {
     } on FirebaseAuthException catch (e) {
       return AuthResult.failure(_getAuthErrorMessage(e.code));
     } catch (e) {
-      // Debug print removed
+      debugPrint('Sign in error: $e');
       return AuthResult.failure('Giriş sırasında bir hata oluştu');
     }
   }
@@ -258,7 +258,7 @@ class FirebaseAuthService {
           await _firestore.collection(_collectionUsers).doc(user.uid).get();
       return doc.exists ? doc.data() : null;
     } catch (e) {
-      // Debug print removed
+      debugPrint('Error getting user data: $e');
       return null;
     }
   }
@@ -275,7 +275,7 @@ class FirebaseAuthService {
       final bannedUsers = List<String>.from(adminDoc.data()?['emails'] ?? []);
       return bannedUsers.contains(email.toLowerCase());
     } catch (e) {
-      // Debug print removed
+      debugPrint('Error checking banned user: $e');
       return false;
     }
   }
@@ -318,123 +318,6 @@ class FirebaseAuthService {
     }
   }
 
-  /// Register invited user - join existing store
-  Future<AuthResult> registerInvitedUser({
-    required String name,
-    required String email,
-    required String password,
-    required String storeId,
-    required String role,
-    required List<String> permissions,
-    required String invitedBy,
-  }) async {
-    try {
-      // Debug print removed
-
-      // Check if user is banned
-      final isBanned = await _checkUserBanned(email);
-      if (isBanned) {
-        return AuthResult.failure('Bu hesap yasaklanmış durumda');
-      }
-
-      // Create Firebase Auth account
-      final UserCredential result = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      final User? user = result.user;
-      if (user == null) {
-        return AuthResult.failure('Hesap oluşturulamadı');
-      }
-
-      // Update display name
-      await user.updateDisplayName(name);
-
-      // Get store name from existing store
-      final storeDoc =
-          await _firestore.collection(_collectionStores).doc(storeId).get();
-      if (!storeDoc.exists) {
-        return AuthResult.failure('Mağaza bulunamadı');
-      }
-
-      final storeName = storeDoc.data()?['name'] ?? 'Bilinmeyen Mağaza';
-
-      // Create user document - invited user
-      final userData = {
-        'uid': user.uid,
-        'email': email,
-        'name': name,
-        'storeId': storeId,
-        'storeName': storeName,
-        'mode': UserMode.basic.toString(),
-        'role': role,
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastLoginAt': FieldValue.serverTimestamp(),
-        'isActive': true,
-        'permissions': permissions,
-        'invitedBy': invitedBy,
-      };
-
-      await _firestore.collection(_collectionUsers).doc(user.uid).set(userData);
-
-      // Add user to store members collection
-      await _firestore
-          .collection(_collectionStoreMembers)
-          .doc(storeId)
-          .collection('members')
-          .doc(user.uid)
-          .set({
-        'userId': user.uid,
-        'email': email,
-        'name': name,
-        'role': role,
-        'permissions': permissions,
-        'joinedAt': FieldValue.serverTimestamp(),
-        'invitedBy': invitedBy,
-        'isActive': true,
-        'status': 'accepted',
-      });
-
-      // Update the invitation status to completed
-      final invitationQuery = await _firestore
-          .collection('store_invitations')
-          .where('email', isEqualTo: email.toLowerCase())
-          .where('storeId', isEqualTo: storeId)
-          .where('status', isEqualTo: 'accepted')
-          .limit(1)
-          .get();
-
-      if (invitationQuery.docs.isNotEmpty) {
-        await invitationQuery.docs.first.reference.update({
-          'userId': user.uid,
-          'status': 'completed',
-          'respondedAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      // Debug print removed
-
-      return AuthResult.success(
-        message: 'Mağaza takımına başarıyla katıldınız',
-        userId: user.uid,
-        data: {
-          'storeId': storeId,
-          'storeName': storeName,
-          'userMode': UserMode.basic.toString(),
-          'role': role,
-          'isInvitedUser': true,
-        },
-      );
-    } on FirebaseAuthException catch (e) {
-      // Debug print removed
-      return AuthResult.failure(_getAuthErrorMessage(e.code));
-    } catch (e) {
-      // Debug print removed
-      return AuthResult.failure('Kayıt sırasında bir hata oluştu: $e');
-    }
-  }
-
   /// Get Firebase Auth error message in Turkish
   String _getAuthErrorMessage(String errorCode) {
     switch (errorCode) {
@@ -461,7 +344,3 @@ class FirebaseAuthService {
     }
   }
 }
-
-
-
-

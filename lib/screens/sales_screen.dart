@@ -608,7 +608,6 @@ class _SalesScreenState extends State<SalesScreen> {
 
     // // Debug print removed // Removed for production
     for (int i = 0; i < cartItems.length; i++) {
-      final item = cartItems[i];
       // Debug print removed
     }
 
@@ -690,7 +689,3 @@ class _SalesScreenState extends State<SalesScreen> {
     // Gerçek implementasyonda printing paketi kullanılacak
   }
 }
-
-
-
-

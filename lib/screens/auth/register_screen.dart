@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth_service.dart';
 import '../../services/firebase_auth_service.dart';
-import '../../services/invitation_service.dart';
 import '../../models/user_mode.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -463,117 +462,55 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       HapticFeedback.lightImpact();
 
-      final name = _nameController.text.trim();
-      final email = _emailController.text.trim();
-      final password = _passwordController.text;
+      // TRY FIREBASE FIRST
+      final firebaseResult =
+          await FirebaseAuthService.instance.registerWithEmailPassword(
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        storeName: _storeNameController.text.trim(),
+        mode: UserMode.basic,
+      );
 
-      // Step 1: Check if user has an accepted invitation
-      // Debug print removed
-      final invitationData =
-          await InvitationService.instance.checkAcceptedInvitation(email);
+      if (firebaseResult.success) {
+        print('Firebase registration successful!');
 
-      bool registrationSuccessful = false;
-      String successMessage = '';
-
-      if (invitationData != null) {
-        // User has an accepted invitation - register as invited user
-        // Debug print removed
-
-        final result = await FirebaseAuthService.instance.registerInvitedUser(
-          name: name,
-          email: email,
-          password: password,
-          storeId: invitationData.storeId,
-          role: invitationData.role.toString().split('.').last,
-          permissions: invitationData.permissions,
-          invitedBy: invitationData.invitedBy ?? '',
+        // Also register with local auth
+        await AuthService.instance.register(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          storeName: _storeNameController.text.trim(),
         );
 
-        if (result.success) {
-          registrationSuccessful = true;
-          successMessage =
-              '${invitationData.storeName ?? 'Mağaza'} takımına başarıyla katıldınız!';
+        if (mounted) {
+          HapticFeedback.selectionClick();
 
-          // Also register with local auth for offline usage
-          await AuthService.instance.register(
-            name: name,
-            email: email,
-            password: password,
-            storeName: invitationData.storeName ?? 'Mağaza',
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Hesabınız Firebase ve local olarak başarıyla oluşturuldu!'),
+              backgroundColor: Colors.green,
+            ),
           );
-        } else {
-          throw Exception(result.message);
+
+          // Navigate to dashboard
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/dashboard',
+            (route) => false,
+          );
         }
       } else {
-        // No invitation found - proceed with normal registration
-        debug// Debug print removed
-
-        final storeName = _storeNameController.text.trim();
-        if (storeName.isEmpty) {
-          throw Exception('Mağaza adı gerekli');
-        }
-
-        // TRY FIREBASE FIRST
-        final firebaseResult =
-            await FirebaseAuthService.instance.registerWithEmailPassword(
-          name: name,
-          email: email,
-          password: password,
-          storeName: storeName,
-          mode: UserMode.basic,
-        );
-
-        if (firebaseResult.success) {
-          // // Debug print removed // Removed for production
-          registrationSuccessful = true;
-          successMessage =
-              'Hesabınız Firebase ve local olarak başarıyla oluşturuldu!';
-
-          // Also register with local auth
-          await AuthService.instance.register(
-            name: name,
-            email: email,
-            password: password,
-            storeName: storeName,
-          );
-        } else {
-          // Firebase failed, try local only
-          // // Debug print removed // Removed for production
-          await _tryLocalRegister();
-          return; // _tryLocalRegister handles its own flow
-        }
-      }
-
-      if (registrationSuccessful && mounted) {
-        HapticFeedback.selectionClick();
-
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(successMessage),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        // Navigate to dashboard
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/dashboard',
-          (route) => false,
-        );
+        // Firebase failed, try local only
+        print('Firebase registration failed: ${firebaseResult.message}');
+        await _tryLocalRegister();
       }
     } catch (e) {
-      // // Debug print removed // Removed for production
-
-      if (mounted) {
-        HapticFeedback.heavyImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Kayıt sırasında bir hata oluştu: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      print('Firebase registration error: $e');
+      // Firebase error, try local
+      await _tryLocalRegister();
     } finally {
       if (mounted) {
         setState(() {
@@ -637,7 +574,3 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 }
-
-
-
-

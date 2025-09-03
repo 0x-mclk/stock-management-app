@@ -6,6 +6,13 @@ import '../providers/supplier_provider.dart';
 import '../providers/app_provider.dart';
 import '../providers/notification_provider.dart';
 import '../utils/currency_formatter.dart';
+import '../widgets/multi_user_indicators_widget.dart';
+import '../widgets/live_product_widget.dart';
+import '../widgets/live_sales_widget.dart';
+import '../services/firebase_auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/store_menu_widget.dart';
+import '../screens/team_management/team_list_screen.dart';
 import 'price_check_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -16,6 +23,19 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  Future<Map<String, dynamic>?> _getCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      return {
+        'uid': user.uid,
+        'email': user.email,
+        'storeId':
+            'default_store', // Bu kısım gerçek store ID ile değiştirilmeli
+      };
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: const StoreMenuWidget(),
       appBar: AppBar(
         title: const Text('Stok Takip - Ana Sayfa'),
         actions: [
@@ -98,6 +119,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 16),
               _buildSummaryCards(context),
+
+              const SizedBox(height: 24),
+
+              // Multi-User Indicators
+              FutureBuilder<Map<String, dynamic>?>(
+                future: _getCurrentUser(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData && snapshot.data != null) {
+                    final user = snapshot.data!;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Takım Durumu',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        MultiUserIndicatorsWidget(
+                          storeId: user['storeId'] ?? '',
+                          currentUserId: user['uid'] ?? '',
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+
+              // Live Data Widgets
+              const Text(
+                'Anlık Veriler',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const LiveProductWidget(),
+              const SizedBox(height: 16),
+              const LiveSalesWidget(),
 
               const SizedBox(height: 24),
 
@@ -209,7 +274,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             gradient: LinearGradient(
-              colors: [color.withValues(alpha: 0.1), color.withValues(alpha: 0.05)],
+              colors: [
+                color.withValues(alpha: 0.1),
+                color.withValues(alpha: 0.05)
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -421,7 +489,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
-
-
-
-

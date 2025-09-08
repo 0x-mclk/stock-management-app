@@ -39,8 +39,7 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset:
-          false, // Klavye açıldığında alt tarafın taşmasını engelle
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('Satış İşlemi'),
         actions: [
@@ -59,26 +58,50 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height -
-              kToolbarHeight -
-              MediaQuery.of(context).padding.top,
-          child: Column(
-            children: [
-              // Ürün Ekleme Alanı (Daha kompakt)
-              _buildProductAddSection(),
+      body: Column(
+        children: [
+          // Üstteki kaydırılabilir alan
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Ürün Ekleme Alanı
+                  _buildProductAddSection(),
 
-              // Sepet Listesi (Daha büyük alan)
-              Expanded(
-                flex: 3, // Sepet alanını büyüttük
-                child: _buildCartSection(),
+                  // Sepet Listesi
+                  _buildCartSection(),
+
+                  const SizedBox(height: 60), // 80'den 60'a düşürüldü
+                ],
               ),
-
-              // Ödeme Bölümü (Kompakt)
-              _buildPaymentSection(),
-            ],
+            ),
           ),
+        ],
+      ),
+      // Alttaki sabit ödeme bölümü
+      bottomSheet: Container(
+        margin: const EdgeInsets.only(bottom: 0), // Margin kaldırıldı
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            top: BorderSide(
+              color: Colors.grey.shade300,
+              width: 1,
+            ),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+              12.0, 12.0, 12.0, 8.0), // Alt padding azaltıldı
+          child: _buildPaymentSection(),
         ),
       ),
     );
@@ -132,28 +155,32 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Widget _buildCartSection() {
     if (cartItems.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.shopping_cart_outlined, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
-              'Sepet Boş',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Ürün eklemek için barkod okutun veya arama yapın',
-              style: TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-          ],
+      return Container(
+        height: 200,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.shopping_cart_outlined, size: 64, color: Colors.grey),
+              SizedBox(height: 16),
+              Text(
+                'Sepet Boş',
+                style: TextStyle(fontSize: 18, color: Colors.grey),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Ürün eklemek için barkod okutun veya arama yapın',
+                style: TextStyle(color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         // Sepet Başlığı
         Container(
@@ -174,11 +201,14 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         ),
 
-        // Sepet Öğeleri
-        Expanded(
+        // Sepet Öğeleri - Maksimum yükseklik ile sınırlandırılmış
+        Container(
+          constraints: const BoxConstraints(
+            maxHeight: 400, // 300'den 400'e artırıldı
+          ),
           child: ListView.builder(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 8), // Padding azaltıldı
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             itemCount: cartItems.length,
             itemBuilder: (context, index) {
               final item = cartItems[index];
@@ -298,120 +328,112 @@ class _SalesScreenState extends State<SalesScreen> {
     final discountAmount = subtotal * (discount / 100);
     final total = subtotal - discountAmount;
 
-    return Container(
-      padding: const EdgeInsets.all(12), // Padding azaltıldı
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.2),
-            spreadRadius: 1,
-            blurRadius: 5,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Fiyat Özeti (tek satırda kompakt)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Ara Toplam: ₺${subtotal.toStringAsFixed(2)}'),
-              if (discount > 0)
-                Text('-₺${discountAmount.toStringAsFixed(2)}',
-                    style: const TextStyle(color: Colors.red)),
-            ],
-          ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Fiyat Özeti (tek satırda kompakt)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Ara Toplam: ₺${subtotal.toStringAsFixed(2)}'),
+            if (discount > 0)
+              Text('-₺${discountAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.red)),
+          ],
+        ),
 
-          // İndirim ve Toplam tek satırda
-          Row(
-            children: [
-              // İndirim girişi
-              const Text('İndirim: '),
-              SizedBox(
-                width: 50, // Width azaltıldı
-                child: TextField(
-                  controller: _discountController,
-                  decoration: const InputDecoration(
-                    hintText: '0',
-                    suffixText: '%',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 4), // Padding azaltıldı
-                    isDense: true, // Compact görünüm
-                  ),
-                  keyboardType: TextInputType.number,
-                  style: const TextStyle(fontSize: 12), // Font boyutu azaltıldı
-                  onChanged: (value) {
-                    setState(() {
-                      discount = double.tryParse(value) ?? 0.0;
-                    });
-                  },
-                ),
-              ),
-              const Spacer(),
-              // Toplam
-              Text(
-                'TOPLAM: ₺${total.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 16, // Font boyutu azaltıldı
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
-                ),
-              ),
-            ],
-          ),
+        const SizedBox(height: 4), // 8'den 4'e düşürüldü
 
-          const SizedBox(height: 8), // Boşluk azaltıldı
-
-          // Ödeme Yöntemi Seçimi (Taksitli kaldırıldı)
-          Wrap(
-            spacing: 6, // Spacing azaltıldı
-            children: PaymentMethod.values
-                .where((method) =>
-                    method != PaymentMethod.installment) // Taksitli kaldırıldı
-                .map((method) {
-              return ChoiceChip(
-                label: Text(
-                  _getPaymentMethodName(method),
-                  style: const TextStyle(fontSize: 12), // Font boyutu azaltıldı
+        // İndirim ve Toplam tek satırda
+        Row(
+          children: [
+            // İndirim girişi
+            const Text('İndirim: '),
+            SizedBox(
+              width: 50,
+              child: TextField(
+                controller: _discountController,
+                decoration: const InputDecoration(
+                  hintText: '0',
+                  suffixText: '%',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2), // vertical 4'ten 2'ye düşürüldü
+                  isDense: true,
                 ),
-                selected: selectedPaymentMethod == method,
-                onSelected: (selected) {
-                  if (selected) {
-                    setState(() {
-                      selectedPaymentMethod = method;
-                    });
-                  }
+                keyboardType: TextInputType.number,
+                style: const TextStyle(fontSize: 12),
+                onChanged: (value) {
+                  setState(() {
+                    discount = double.tryParse(value) ?? 0.0;
+                  });
                 },
-                materialTapTargetSize:
-                    MaterialTapTargetSize.shrinkWrap, // Kompakt tap target
-              );
-            }).toList(),
-          ),
-
-          const SizedBox(height: 8), // Boşluk azaltıldı
-
-          // Satış Tamamla Butonu
-          ElevatedButton(
-            onPressed: cartItems.isEmpty ? null : () => _completeSale(total),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              padding:
-                  const EdgeInsets.symmetric(vertical: 12), // Padding azaltıldı
-            ),
-            child: const Text(
-              'SATIŞ TAMAMLA',
-              style: TextStyle(
-                fontSize: 16, // Font boyutu azaltıldı
-                fontWeight: FontWeight.bold,
               ),
             ),
+            const Spacer(),
+            // Toplam
+            Text(
+              'TOPLAM: ₺${total.toStringAsFixed(2)}',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 4), // 8'den 4'e düşürüldü
+
+        // Ödeme Yöntemi Seçimi (Taksitli kaldırıldı)
+        Wrap(
+          spacing: 4, // 6'dan 4'e düşürüldü
+          children: PaymentMethod.values
+              .where((method) =>
+                  method != PaymentMethod.installment) // Taksitli kaldırıldı
+              .map((method) {
+            return ChoiceChip(
+              label: Text(
+                _getPaymentMethodName(method),
+                style: const TextStyle(fontSize: 11), // 12'den 11'e düşürüldü
+              ),
+              selected: selectedPaymentMethod == method,
+              onSelected: (selected) {
+                if (selected) {
+                  setState(() {
+                    selectedPaymentMethod = method;
+                  });
+                }
+              },
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            );
+          }).toList(),
+        ),
+
+        const SizedBox(height: 4), // 8'den 4'e düşürüldü
+
+        // Satış Tamamla Butonu
+        ElevatedButton(
+          onPressed: cartItems.isEmpty ? null : () => _completeSale(total),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            padding:
+                const EdgeInsets.symmetric(vertical: 8), // 12'den 8'e düşürüldü
           ),
-        ],
-      ),
+          child: const Text(
+            'SATIŞ TAMAMLA',
+            style: TextStyle(
+              fontSize: 15, // 16'dan 15'e düşürüldü
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+
+        // Butonun altındaki boşluk kaldırıldı
+      ],
     );
   }
 

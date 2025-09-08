@@ -163,13 +163,17 @@ class SalesProvider extends ChangeNotifier {
   }
 
   double getTotalSalesAmount({DateTime? startDate, DateTime? endDate}) {
-    var filteredSales = _sales;
+    // Önce tedarikçi alışverişlerini çıkar (sadece müşteri satışları)
+    var filteredSales =
+        _sales.where((sale) => sale.supplierId == null).toList();
 
     if (startDate != null && endDate != null) {
-      filteredSales = _sales.where((sale) {
-        return sale.createdAt
-                .isAfter(startDate.subtract(const Duration(days: 1))) &&
-            sale.createdAt.isBefore(endDate.add(const Duration(days: 1)));
+      filteredSales = filteredSales.where((sale) {
+        // Sadece belirtilen tarih aralığındaki satışları al (başlangıç ve bitiş dahil)
+        return sale.createdAt.isAtSameMomentAs(startDate) ||
+            sale.createdAt.isAfter(startDate) &&
+                (sale.createdAt.isBefore(endDate) ||
+                    sale.createdAt.isAtSameMomentAs(endDate));
       }).toList();
     }
 
@@ -178,9 +182,14 @@ class SalesProvider extends ChangeNotifier {
 
   List<Sale> getSalesByDateRange(DateTime startDate, DateTime endDate) {
     return _sales.where((sale) {
-      return sale.createdAt
-              .isAfter(startDate.subtract(const Duration(days: 1))) &&
-          sale.createdAt.isBefore(endDate.add(const Duration(days: 1)));
+      // Önce tedarikçi alışverişlerini çıkar (sadece müşteri satışları)
+      if (sale.supplierId != null) return false;
+
+      // Sadece belirtilen tarih aralığındaki satışları al (başlangıç ve bitiş dahil)
+      return sale.createdAt.isAtSameMomentAs(startDate) ||
+          sale.createdAt.isAfter(startDate) &&
+              (sale.createdAt.isBefore(endDate) ||
+                  sale.createdAt.isAtSameMomentAs(endDate));
     }).toList();
   }
 
@@ -188,12 +197,16 @@ class SalesProvider extends ChangeNotifier {
   double getDailyProfit(ProductProvider productProvider) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
 
+    // Önce tedarikçi alışverişlerini çıkar, sonra bugünün satışlarını al
     final todaysSales = _sales.where((sale) {
-      return sale.createdAt
-              .isAfter(today.subtract(const Duration(milliseconds: 1))) &&
-          sale.createdAt.isBefore(tomorrow);
+      // Sadece müşteri satışları (supplierId null olanlar)
+      if (sale.supplierId != null) return false;
+
+      // Sadece bugünün satışlarını al (00:00:00 - 23:59:59)
+      return sale.createdAt.isAtSameMomentAs(today) ||
+          sale.createdAt.isAfter(today) && sale.createdAt.isBefore(tomorrow);
     }).toList();
 
     double totalProfit = 0.0;
@@ -226,12 +239,15 @@ class SalesProvider extends ChangeNotifier {
   double getDailyTotal() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
 
     final todaysSales = _sales.where((sale) {
-      return sale.createdAt
-              .isAfter(today.subtract(const Duration(milliseconds: 1))) &&
-          sale.createdAt.isBefore(tomorrow);
+      // Önce tedarikçi alışverişlerini çıkar (sadece müşteri satışları)
+      if (sale.supplierId != null) return false;
+
+      // Sadece bugünün satışlarını al (00:00:00 - 23:59:59)
+      return sale.createdAt.isAtSameMomentAs(today) ||
+          sale.createdAt.isAfter(today) && sale.createdAt.isBefore(tomorrow);
     }).toList();
 
     return todaysSales.fold(0.0, (total, sale) => total + sale.finalAmount);

@@ -2057,8 +2057,12 @@ class _ReportsScreenState extends State<ReportsScreen>
       builder: (context, salesProvider, productProvider, child) {
         final allSales = salesProvider.sales;
 
+        // Önce tedarikçi alışverişlerini filtrele (sadece müşteri satışlarını al)
+        final customerSalesOnly =
+            allSales.where((sale) => sale.supplierId == null).toList();
+
         // Tarih aralığına göre filtreleme
-        final filteredSales = _filterSalesByDateRange(allSales);
+        final filteredSales = _filterSalesByDateRange(customerSalesOnly);
 
         if (filteredSales.isEmpty) {
           return Column(
@@ -3274,7 +3278,3 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
   }
 }
-
-
-
-

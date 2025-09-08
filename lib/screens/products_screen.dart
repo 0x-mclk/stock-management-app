@@ -56,9 +56,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 case 'export':
                   _exportToExcel();
                   break;
-                case 'bulk_update':
-                  _showBulkUpdateDialog();
-                  break;
               }
             },
             itemBuilder: (context) => [
@@ -79,16 +76,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     Icon(Icons.file_download),
                     SizedBox(width: 8),
                     Text('Excel\'e Dışa Aktar'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'bulk_update',
-                child: Row(
-                  children: [
-                    Icon(Icons.update),
-                    SizedBox(width: 8),
-                    Text('Toplu Güncelleme'),
                   ],
                 ),
               ),
@@ -219,66 +206,79 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ),
           ],
         ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            switch (value) {
-              case 'edit':
-                _showEditProductDialog(product);
-                break;
-              case 'delete':
-                _showDeleteConfirmation(product);
-                break;
-              case 'add_stock':
-                _showAddStockDialog(product);
-                break;
-              case 'analyze':
+        onTap: () {
+          _showProductOptionsDialog(product);
+        },
+      ),
+    );
+  }
+
+  void _showProductOptionsDialog(Product product) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          product.name,
+          style: const TextStyle(fontSize: 18),
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              dense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              leading:
+                  const Icon(Icons.analytics, color: Colors.blue, size: 22),
+              title: const Text('Ürün Analizi', style: TextStyle(fontSize: 16)),
+              onTap: () {
+                Navigator.pop(context);
                 _navigateToProductAnalysis(product);
-                break;
-            }
-          },
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'analyze',
-              child: Row(
-                children: [
-                  Icon(Icons.analytics, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Text('Ürün Analizi'),
-                ],
-              ),
+              },
             ),
-            const PopupMenuItem(
-              value: 'edit',
-              child: Row(
-                children: [
-                  Icon(Icons.edit),
-                  SizedBox(width: 8),
-                  Text('Düzenle'),
-                ],
-              ),
+            ListTile(
+              dense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              leading: const Icon(Icons.edit, size: 22),
+              title: const Text('Düzenle', style: TextStyle(fontSize: 16)),
+              onTap: () {
+                Navigator.pop(context);
+                _showEditProductDialog(product);
+              },
             ),
-            const PopupMenuItem(
-              value: 'add_stock',
-              child: Row(
-                children: [
-                  Icon(Icons.add_box),
-                  SizedBox(width: 8),
-                  Text('Stok Ekle'),
-                ],
-              ),
+            ListTile(
+              dense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              leading: const Icon(Icons.add_box, size: 22),
+              title: const Text('Stok Ekle', style: TextStyle(fontSize: 16)),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddStockDialog(product);
+              },
             ),
-            const PopupMenuItem(
-              value: 'delete',
-              child: Row(
-                children: [
-                  Icon(Icons.delete, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Sil', style: TextStyle(color: Colors.red)),
-                ],
-              ),
+            ListTile(
+              dense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              leading: const Icon(Icons.delete, color: Colors.red, size: 22),
+              title: const Text('Sil',
+                  style: TextStyle(color: Colors.red, fontSize: 16)),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteConfirmation(product);
+              },
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal', style: TextStyle(fontSize: 16)),
+          ),
+        ],
       ),
     );
   }
@@ -601,218 +601,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
         ],
       ),
     );
-  }
-
-  void _showBulkUpdateDialog() {
-    final TextEditingController percentageController = TextEditingController();
-    String updateType = 'sale_price'; // sale_price, purchase_price, stock
-    bool isIncrease = true; // true: artır, false: azalt
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Toplu Güncelleme'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  value: updateType,
-                  decoration: const InputDecoration(
-                    labelText: 'Güncellenecek Alan',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'sale_price',
-                      child: Text('Satış Fiyatı'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'purchase_price',
-                      child: Text('Alış Fiyatı'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'stock',
-                      child: Text('Stok Miktarı'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        updateType = value;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text('Artır'),
-                        value: true,
-                        groupValue: isIncrease,
-                        onChanged: (value) {
-                          setState(() {
-                            isIncrease = value ?? true;
-                          });
-                        },
-                      ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text('Azalt'),
-                        value: false,
-                        groupValue: isIncrease,
-                        onChanged: (value) {
-                          setState(() {
-                            isIncrease = value ?? true;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: percentageController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Yüzde (%)',
-                    border: OutlineInputBorder(),
-                    hintText: 'Örn: 10',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('İptal'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                _performBulkUpdate(
-                    updateType, isIncrease, percentageController.text);
-                Navigator.pop(context);
-              },
-              child: const Text('Güncelle'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _performBulkUpdate(
-      String updateType, bool isIncrease, String percentageText) async {
-    try {
-      double percentage = double.tryParse(percentageText) ?? 0;
-      if (percentage <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Geçerli bir yüzde değeri girin')),
-        );
-        return;
-      }
-
-      final productProvider =
-          Provider.of<ProductProvider>(context, listen: false);
-      final products = productProvider.products;
-      int updatedCount = 0;
-
-      for (var product in products) {
-        switch (updateType) {
-          case 'sale_price':
-            double newPrice = product.salePrice;
-            if (isIncrease) {
-              newPrice = product.salePrice * (1 + percentage / 100);
-            } else {
-              newPrice = product.salePrice * (1 - percentage / 100);
-            }
-            if (newPrice > 0) {
-              Product updatedProduct = Product(
-                id: product.id,
-                name: product.name,
-                barcode: product.barcode,
-                category: product.category,
-                purchasePrice: product.purchasePrice,
-                salePrice: newPrice,
-                stock: product.stock,
-                minStock: product.minStock,
-                description: product.description,
-              );
-              await productProvider.updateProduct(updatedProduct);
-              updatedCount++;
-            }
-            break;
-
-          case 'purchase_price':
-            if (product.purchasePrice != null) {
-              double newPrice = product.purchasePrice!;
-              if (isIncrease) {
-                newPrice = product.purchasePrice! * (1 + percentage / 100);
-              } else {
-                newPrice = product.purchasePrice! * (1 - percentage / 100);
-              }
-              if (newPrice > 0) {
-                Product updatedProduct = Product(
-                  id: product.id,
-                  name: product.name,
-                  barcode: product.barcode,
-                  category: product.category,
-                  purchasePrice: newPrice,
-                  salePrice: product.salePrice,
-                  stock: product.stock,
-                  minStock: product.minStock,
-                  description: product.description,
-                );
-                await productProvider.updateProduct(updatedProduct);
-                updatedCount++;
-              }
-            }
-            break;
-
-          case 'stock':
-            int newStock = product.stock;
-            int change = (product.stock * percentage / 100).round();
-            if (isIncrease) {
-              newStock = product.stock + change;
-            } else {
-              newStock = product.stock - change;
-            }
-            if (newStock >= 0) {
-              Product updatedProduct = Product(
-                id: product.id,
-                name: product.name,
-                barcode: product.barcode,
-                category: product.category,
-                purchasePrice: product.purchasePrice,
-                salePrice: product.salePrice,
-                stock: newStock,
-                minStock: product.minStock,
-                description: product.description,
-              );
-              await productProvider.updateProduct(updatedProduct);
-              updatedCount++;
-            }
-            break;
-        }
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$updatedCount ürün başarıyla güncellendi'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
-      );
-    }
   }
 
   Future<void> _importFromExcel() async {

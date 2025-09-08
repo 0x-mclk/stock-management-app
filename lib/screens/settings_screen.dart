@@ -725,7 +725,3 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // TODO: Implement rate app dialog
   }
 }
-
-
-
-

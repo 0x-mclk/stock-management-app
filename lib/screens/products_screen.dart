@@ -9,6 +9,7 @@ import '../models/product.dart';
 import '../utils/currency_formatter.dart';
 import 'barcode_scanner_screen.dart';
 import 'add_product_with_camera_screen.dart';
+import 'qr_product_analysis_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -230,9 +231,22 @@ class _ProductsScreenState extends State<ProductsScreen> {
               case 'add_stock':
                 _showAddStockDialog(product);
                 break;
+              case 'analyze':
+                _navigateToProductAnalysis(product);
+                break;
             }
           },
           itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'analyze',
+              child: Row(
+                children: [
+                  Icon(Icons.analytics, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('Ürün Analizi'),
+                ],
+              ),
+            ),
             const PopupMenuItem(
               value: 'edit',
               child: Row(
@@ -997,8 +1011,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
       );
     }
   }
+
+  // Navigate to product analysis with selected product
+  void _navigateToProductAnalysis(Product product) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QRProductAnalysisScreen(
+          preSelectedProduct: product,
+        ),
+      ),
+    );
+  }
 }
-
-
-
-

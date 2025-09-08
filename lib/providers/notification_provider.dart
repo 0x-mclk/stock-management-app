@@ -63,11 +63,12 @@ class NotificationProvider extends ChangeNotifier {
         final notification = AppNotification(
           id: 'low_stock_${product.id}',
           title: 'Düşük Stok Uyarısı',
-          message: '${product.name} stoku kritik seviyede! Kalan: ${product.stock} adet (Min: ${product.minStock})',
+          message:
+              '${product.name} stoku kritik seviyede! Kalan: ${product.stock} adet (Min: ${product.minStock})',
           type: NotificationType.lowStock,
           createdAt: DateTime.now(),
         );
-        
+
         // Aynı ürün için bildirim zaten varsa ekleme
         bool exists = _notifications.any((n) => n.id == notification.id);
         if (!exists) {
@@ -80,7 +81,9 @@ class NotificationProvider extends ChangeNotifier {
 
   // Kritik stok seviyesindeki ürün sayısını döndür
   int getCriticalStockCount(List<dynamic> products) {
-    return products.where((p) => p.stock <= p.minStock && p.minStock > 0).length;
+    return products
+        .where((p) => p.stock <= p.minStock && p.minStock > 0)
+        .length;
   }
 }
 

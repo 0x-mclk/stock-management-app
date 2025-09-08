@@ -9,7 +9,9 @@ import '../providers/product_provider.dart';
 import '../providers/sales_provider.dart';
 
 class QRProductAnalysisScreen extends StatefulWidget {
-  const QRProductAnalysisScreen({super.key});
+  final Product? preSelectedProduct;
+
+  const QRProductAnalysisScreen({super.key, this.preSelectedProduct});
 
   @override
   State<QRProductAnalysisScreen> createState() =>
@@ -19,11 +21,16 @@ class QRProductAnalysisScreen extends StatefulWidget {
 class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
     with TickerProviderStateMixin {
   MobileScannerController cameraController = MobileScannerController();
-  bool _isScanning = true;
+  bool _isScanning = false;
+  bool _showSearchInput = false;
+  bool _showSelectionScreen = true;
   Product? _scannedProduct;
   Map<String, dynamic>? _productAnalysis;
   late TabController _tabController;
   DateTimeRange? _customDateRange;
+
+  final TextEditingController _searchController = TextEditingController();
+  List<Product> _filteredProducts = [];
 
   final _currencyFormat = NumberFormat.currency(
     locale: 'tr_TR',
@@ -35,13 +42,31 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+
+    // If a product is pre-selected, skip selection screen and show analysis
+    if (widget.preSelectedProduct != null) {
+      _showSelectionScreen = false;
+      _scannedProduct = widget.preSelectedProduct;
+      _generateAnalysis();
+    }
   }
 
   @override
   void dispose() {
     cameraController.dispose();
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  // Generate analysis for pre-selected product
+  void _generateAnalysis() {
+    if (_scannedProduct == null) return;
+
+    final salesProvider = Provider.of<SalesProvider>(context, listen: false);
+    setState(() {
+      _productAnalysis = _analyzeProduct(_scannedProduct!, salesProvider.sales);
+    });
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -68,6 +93,8 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
 
       setState(() {
         _isScanning = false;
+        _showSelectionScreen = false;
+        _showSearchInput = false;
         _scannedProduct = product;
         _productAnalysis = _analyzeProduct(product, salesProvider.sales);
       });
@@ -92,6 +119,68 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
         ),
       );
     }
+  }
+
+  void _searchProducts(String query) {
+    if (query.isEmpty) {
+      setState(() {
+        _filteredProducts = [];
+      });
+      return;
+    }
+
+    final productProvider =
+        Provider.of<ProductProvider>(context, listen: false);
+    setState(() {
+      _filteredProducts = productProvider.products
+          .where((product) =>
+              product.name.toLowerCase().contains(query.toLowerCase()) ||
+              product.barcode.contains(query))
+          .toList();
+    });
+  }
+
+  void _selectProduct(Product product) {
+    final salesProvider = Provider.of<SalesProvider>(context, listen: false);
+
+    setState(() {
+      _scannedProduct = product;
+      _showSelectionScreen = false;
+      _showSearchInput = false;
+      _filteredProducts = [];
+      _searchController.clear();
+      _productAnalysis = _analyzeProduct(product, salesProvider.sales);
+    });
+  }
+
+  void _startQRScanning() {
+    setState(() {
+      _isScanning = true;
+      _showSelectionScreen = false;
+      _showSearchInput = false;
+    });
+    cameraController.start();
+  }
+
+  void _startProductSearch() {
+    setState(() {
+      _showSearchInput = true;
+      _showSelectionScreen = false;
+      _isScanning = false;
+    });
+  }
+
+  void _backToSelection() {
+    setState(() {
+      _showSelectionScreen = true;
+      _showSearchInput = false;
+      _isScanning = false;
+      _scannedProduct = null;
+      _productAnalysis = null;
+      _filteredProducts = [];
+      _searchController.clear();
+    });
+    cameraController.stop();
   }
 
   Map<String, dynamic> _analyzeProduct(Product product, List<Sale> sales) {
@@ -189,16 +278,6 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
     };
   }
 
-  void _resetScanner() {
-    setState(() {
-      _isScanning = true;
-      _scannedProduct = null;
-      _productAnalysis = null;
-      _customDateRange = null;
-    });
-    cameraController.start();
-  }
-
   Future<void> _selectCustomDateRange() async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
@@ -234,19 +313,238 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('QR Kod ile Ürün Analizi'),
+        title: const Text('Ürün Analizi'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
           if (_scannedProduct != null)
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: _resetScanner,
-              tooltip: 'Yeni Ürün Tara',
+              onPressed: _backToSelection,
+              tooltip: 'Başa Dön',
             ),
         ],
       ),
-      body: _isScanning ? _buildScanner() : _buildAnalysis(),
+      body: _buildContent(),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_showSelectionScreen) {
+      return _buildSelectionScreen();
+    } else if (_isScanning) {
+      return _buildScanner();
+    } else if (_showSearchInput) {
+      return _buildSearchScreen();
+    } else if (_scannedProduct != null) {
+      return _buildAnalysis();
+    } else {
+      return _buildSelectionScreen();
+    }
+  }
+
+  Widget _buildSelectionScreen() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.analytics,
+              size: 80,
+              color: Colors.blue[300],
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Ürün Analizi',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Analiz yapmak istediğiniz ürünü nasıl seçmek istersiniz?',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 48),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: _startQRScanning,
+                icon: const Icon(Icons.qr_code_scanner, size: 28),
+                label: const Text(
+                  'QR Kod Tara',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  elevation: 3,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: _startProductSearch,
+                icon: const Icon(Icons.search, size: 28),
+                label: const Text(
+                  'Ürün Ara',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  elevation: 3,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchScreen() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  labelText: 'Ürün adı veya barkod girin...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {
+                        _filteredProducts = [];
+                      });
+                    },
+                  ),
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: _searchProducts,
+                autofocus: true,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: _backToSelection,
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Geri'),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: _startQRScanning,
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: const Text('QR Tara'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _filteredProducts.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.search,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _searchController.text.isEmpty
+                            ? 'Ürün aramaya başlayın...'
+                            : 'Ürün bulunamadı',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: _filteredProducts.length,
+                  itemBuilder: (context, index) {
+                    final product = _filteredProducts[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.blue[100],
+                          child: Icon(
+                            Icons.inventory,
+                            color: Colors.blue[800],
+                          ),
+                        ),
+                        title: Text(
+                          product.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Barkod: ${product.barcode}'),
+                            Text(
+                              'Stok: ${product.stock} adet',
+                              style: TextStyle(
+                                color: product.stock <= product.minStock
+                                    ? Colors.red
+                                    : Colors.green,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _currencyFormat.format(product.salePrice),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward_ios, size: 16),
+                          ],
+                        ),
+                        onTap: () => _selectProduct(product),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -846,7 +1144,3 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
     );
   }
 }
-
-
-
-

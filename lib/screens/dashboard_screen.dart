@@ -12,6 +12,7 @@ import '../widgets/store_menu_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'price_check_screen.dart';
 import 'notifications_screen.dart';
+import 'qr_product_analysis_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -198,7 +199,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 );
 
                 // Gerçek günlük kâr hesaplama (satış fiyatı - alış fiyatı)
-                double dailyProfit = salesProvider.getDailyProfit(productProvider);
+                double dailyProfit =
+                    salesProvider.getDailyProfit(productProvider);
 
                 return Wrap(
                   spacing: 16,
@@ -333,14 +335,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
           () => context.read<AppProvider>().setCurrentPage(2),
         ),
         _buildQuickActionButton(
+          'Ürün Analizi',
+          Icons.analytics,
+          Colors.teal,
+          () => _openProductAnalysis(context),
+        ),
+        _buildQuickActionButton(
           'Fiyat Kontrol',
           Icons.qr_code_scanner,
-          Colors.teal,
+          Colors.orange,
           () => _openPriceCheck(context),
         ),
         _buildQuickActionButton(
           'Raporlar',
-          Icons.analytics,
+          Icons.assessment,
           Colors.purple,
           () => context.read<AppProvider>().setCurrentPage(4),
         ),
@@ -401,6 +409,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const PriceCheckScreen(),
+      ),
+    );
+  }
+
+  void _openProductAnalysis(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const QRProductAnalysisScreen(),
       ),
     );
   }

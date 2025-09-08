@@ -191,12 +191,13 @@ class SalesProvider extends ChangeNotifier {
     final tomorrow = today.add(const Duration(days: 1));
 
     final todaysSales = _sales.where((sale) {
-      return sale.createdAt.isAfter(today.subtract(const Duration(milliseconds: 1))) &&
-             sale.createdAt.isBefore(tomorrow);
+      return sale.createdAt
+              .isAfter(today.subtract(const Duration(milliseconds: 1))) &&
+          sale.createdAt.isBefore(tomorrow);
     }).toList();
 
     double totalProfit = 0.0;
-    
+
     for (final sale in todaysSales) {
       for (final item in sale.items) {
         // Ürünü product provider'dan bul
@@ -210,13 +211,14 @@ class SalesProvider extends ChangeNotifier {
             stock: 0,
           ),
         );
-        
+
         // Kar = (Satış Fiyatı - Alış Fiyatı) * Miktar
-        double itemProfit = (item.unitPrice - (product.purchasePrice ?? 0.0)) * item.quantity;
+        double itemProfit =
+            (item.unitPrice - (product.purchasePrice ?? 0.0)) * item.quantity;
         totalProfit += itemProfit;
       }
     }
-    
+
     return totalProfit;
   }
 
@@ -227,8 +229,9 @@ class SalesProvider extends ChangeNotifier {
     final tomorrow = today.add(const Duration(days: 1));
 
     final todaysSales = _sales.where((sale) {
-      return sale.createdAt.isAfter(today.subtract(const Duration(milliseconds: 1))) &&
-             sale.createdAt.isBefore(tomorrow);
+      return sale.createdAt
+              .isAfter(today.subtract(const Duration(milliseconds: 1))) &&
+          sale.createdAt.isBefore(tomorrow);
     }).toList();
 
     return todaysSales.fold(0.0, (total, sale) => total + sale.finalAmount);

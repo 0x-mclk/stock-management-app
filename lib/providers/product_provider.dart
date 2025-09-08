@@ -33,10 +33,10 @@ class ProductProvider extends ChangeNotifier {
       _products = await _dataService.loadProducts();
       _isInitialized = true;
       _filterProducts();
-      
+
       // Stok kontrolü yap ve bildirimleri güncelle
       _notificationProvider?.checkLowStockProducts(_products);
-      
+
       notifyListeners();
     } catch (e) {
       // // Debug print removed // Removed for production
@@ -75,10 +75,10 @@ class ProductProvider extends ChangeNotifier {
       if (index != -1) {
         _products[index] = product;
         _filterProducts();
-        
+
         // Stok kontrolü yap ve bildirimleri güncelle
         _notificationProvider?.checkLowStockProducts(_products);
-        
+
         notifyListeners();
       }
     } catch (e) {

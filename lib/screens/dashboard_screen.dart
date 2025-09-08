@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:stock_management_app/screens/firestore_test_page.dart';
 import '../providers/product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/supplier_provider.dart';
@@ -173,6 +174,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.science),
+                tooltip: 'Test',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const FirestoreTestPage()),
+                  );
+                },
               ),
               const SizedBox(height: 16),
               _buildQuickActions(context),

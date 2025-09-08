@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'providers/app_provider.dart';
 import 'providers/product_provider.dart';
 import 'providers/sales_provider.dart';
@@ -18,6 +20,16 @@ import 'services/offline_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    // Debug: print('Firebase initialized successfully');
+  } catch (e) {
+    // Debug: print('Firebase initialization error: $e');
+  }
 
   // Initialize locale data for Turkish formatting
   try {

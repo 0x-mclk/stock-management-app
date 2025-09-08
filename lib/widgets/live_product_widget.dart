@@ -40,7 +40,8 @@ class _LiveProductWidgetState extends State<LiveProductWidget> {
             Consumer<ProductProvider>(
               builder: (context, productProvider, child) {
                 final products = productProvider.products;
-                final lowStockProducts = products.where((p) => p.stock < 10).toList();
+                final lowStockProducts =
+                    products.where((p) => p.stock < 10).toList();
                 final totalValue = products.fold<double>(
                   0,
                   (sum, product) => sum + (product.salePrice * product.stock),
@@ -93,15 +94,16 @@ class _LiveProductWidgetState extends State<LiveProductWidget> {
     );
   }
 
-  Widget _buildMetricCard(String label, String value, IconData icon, Color color) {
+  Widget _buildMetricCard(
+      String label, String value, IconData icon, Color color) {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [

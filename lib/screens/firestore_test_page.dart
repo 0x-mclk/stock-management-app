@@ -1588,7 +1588,3 @@ class _FirestoreTestPageState extends State<FirestoreTestPage> {
     }
   }
 }
-
-
-
-

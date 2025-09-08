@@ -8,13 +8,10 @@ import '../providers/app_provider.dart';
 import '../providers/notification_provider.dart';
 import '../utils/currency_formatter.dart';
 import '../widgets/multi_user_indicators_widget.dart';
-import '../widgets/live_product_widget.dart';
-import '../widgets/live_sales_widget.dart';
-import '../services/firebase_auth_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/store_menu_widget.dart';
-import '../screens/team_management/team_list_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'price_check_screen.dart';
+import 'notifications_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -152,21 +149,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
 
-              // Live Data Widgets
-              const Text(
-                'Anlık Veriler',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const LiveProductWidget(),
-              const SizedBox(height: 16),
-              const LiveSalesWidget(),
-
-              const SizedBox(height: 24),
-
               // Quick Actions
               const Text(
                 'Hızlı İşlemler',
@@ -215,8 +197,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   endDate: endOfDay,
                 );
 
-                // Toplam tedarikçi borcunu hesapla
-                double totalDebt = supplierProvider.getTotalDebt();
+                // Gerçek günlük kâr hesaplama (satış fiyatı - alış fiyatı)
+                double dailyProfit = salesProvider.getDailyProfit(productProvider);
 
                 return Wrap(
                   spacing: 16,
@@ -235,9 +217,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Colors.green,
                     ),
                     _buildSummaryCard(
-                      'Toptancı Borcum',
-                      CurrencyFormatter.formatWithSymbol(totalDebt),
-                      Icons.people,
+                      'Günlük Kâr',
+                      CurrencyFormatter.formatWithSymbol(dailyProfit),
+                      Icons.monetization_on,
                       Colors.orange,
                     ),
                     _buildSummaryCard(
@@ -408,88 +390,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showNotifications(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Consumer<NotificationProvider>(
-        builder: (context, notificationProvider, child) {
-          if (notificationProvider.notifications.isEmpty) {
-            return const SizedBox(
-              height: 200,
-              child: Center(
-                child: Text('Henüz bildirim bulunmuyor.'),
-              ),
-            );
-          }
-
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.6,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Bildirimler',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: notificationProvider.notifications.length,
-                    itemBuilder: (context, index) {
-                      final notification =
-                          notificationProvider.notifications[index];
-                      return Card(
-                        color: notification.isRead ? null : Colors.blue.shade50,
-                        child: ListTile(
-                          leading: Icon(
-                            _getNotificationIcon(notification.type),
-                            color: _getNotificationColor(notification.type),
-                          ),
-                          title: Text(notification.title),
-                          subtitle: Text(notification.message),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () => notificationProvider
-                                .removeNotification(notification.id),
-                          ),
-                          onTap: () =>
-                              notificationProvider.markAsRead(notification.id),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const NotificationsScreen(),
       ),
     );
-  }
-
-  IconData _getNotificationIcon(NotificationType type) {
-    switch (type) {
-      case NotificationType.lowStock:
-        return Icons.inventory;
-      case NotificationType.debt:
-        return Icons.account_balance;
-      case NotificationType.general:
-        return Icons.info;
-    }
-  }
-
-  Color _getNotificationColor(NotificationType type) {
-    switch (type) {
-      case NotificationType.lowStock:
-        return Colors.orange;
-      case NotificationType.debt:
-        return Colors.red;
-      case NotificationType.general:
-        return Colors.blue;
-    }
   }
 
   void _openPriceCheck(BuildContext context) {

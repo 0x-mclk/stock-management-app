@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
 import '../services/data_service.dart';
+import 'product_provider.dart';
 
 class CartItem {
   final Product product;
@@ -181,5 +182,55 @@ class SalesProvider extends ChangeNotifier {
               .isAfter(startDate.subtract(const Duration(days: 1))) &&
           sale.createdAt.isBefore(endDate.add(const Duration(days: 1)));
     }).toList();
+  }
+
+  // Günlük satış kârı hesaplama
+  double getDailyProfit(ProductProvider productProvider) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final todaysSales = _sales.where((sale) {
+      return sale.createdAt.isAfter(today.subtract(const Duration(milliseconds: 1))) &&
+             sale.createdAt.isBefore(tomorrow);
+    }).toList();
+
+    double totalProfit = 0.0;
+    
+    for (final sale in todaysSales) {
+      for (final item in sale.items) {
+        // Ürünü product provider'dan bul
+        final product = productProvider.products.firstWhere(
+          (p) => p.id == item.productId,
+          orElse: () => Product(
+            barcode: item.productBarcode,
+            name: item.productName,
+            purchasePrice: 0.0, // Eğer ürün bulunamadıysa kâr hesaplayamayız
+            salePrice: item.unitPrice,
+            stock: 0,
+          ),
+        );
+        
+        // Kar = (Satış Fiyatı - Alış Fiyatı) * Miktar
+        double itemProfit = (item.unitPrice - (product.purchasePrice ?? 0.0)) * item.quantity;
+        totalProfit += itemProfit;
+      }
+    }
+    
+    return totalProfit;
+  }
+
+  // Günlük toplam satış miktarı
+  double getDailyTotal() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final todaysSales = _sales.where((sale) {
+      return sale.createdAt.isAfter(today.subtract(const Duration(milliseconds: 1))) &&
+             sale.createdAt.isBefore(tomorrow);
+    }).toList();
+
+    return todaysSales.fold(0.0, (total, sale) => total + sale.finalAmount);
   }
 }

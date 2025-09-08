@@ -50,6 +50,38 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
+
+  // Stok kontrol fonksiyonu
+  void checkLowStockProducts(List<dynamic> products) {
+    if (!_stockAlertsEnabled) return;
+
+    // Mevcut düşük stok bildirimlerini temizle
+    _notifications.removeWhere((n) => n.type == NotificationType.lowStock);
+
+    for (var product in products) {
+      if (product.stock <= product.minStock && product.minStock > 0) {
+        final notification = AppNotification(
+          id: 'low_stock_${product.id}',
+          title: 'Düşük Stok Uyarısı',
+          message: '${product.name} stoku kritik seviyede! Kalan: ${product.stock} adet (Min: ${product.minStock})',
+          type: NotificationType.lowStock,
+          createdAt: DateTime.now(),
+        );
+        
+        // Aynı ürün için bildirim zaten varsa ekleme
+        bool exists = _notifications.any((n) => n.id == notification.id);
+        if (!exists) {
+          _notifications.insert(0, notification);
+        }
+      }
+    }
+    notifyListeners();
+  }
+
+  // Kritik stok seviyesindeki ürün sayısını döndür
+  int getCriticalStockCount(List<dynamic> products) {
+    return products.where((p) => p.stock <= p.minStock && p.minStock > 0).length;
+  }
 }
 
 class AppNotification {

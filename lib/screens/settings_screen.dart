@@ -4,6 +4,7 @@ import '../providers/theme_provider.dart';
 import '../providers/product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/supplier_provider.dart';
+import '../providers/notification_provider.dart';
 import '../services/connectivity_service.dart';
 import '../services/offline_service.dart';
 import '../services/database_service.dart';
@@ -222,16 +223,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Card(
       child: Column(
         children: [
-          ListTile(
-            leading: const Icon(Icons.notifications),
-            title: const Text('Bildirimler'),
-            subtitle: const Text('Uygulama bildirimleri'),
-            trailing: Switch(
-              value: true, // Bu değer shared preferences'dan gelecek
-              onChanged: (value) {
-                // Burada bildirim ayarı kaydedilecek
-              },
-            ),
+          Consumer<NotificationProvider>(
+            builder: (context, notificationProvider, child) {
+              return SwitchListTile(
+                secondary: const Icon(Icons.notifications),
+                title: const Text('Bildirimler'),
+                subtitle: const Text('Stok uyarı bildirimleri'),
+                value: notificationProvider.stockAlertsEnabled,
+                onChanged: (bool value) {
+                  notificationProvider.setStockAlertsEnabled(value);
+                },
+              );
+            },
           ),
           ListTile(
             leading: const Icon(Icons.language),

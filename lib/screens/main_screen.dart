@@ -7,7 +7,6 @@ import 'products_screen.dart';
 import 'sales_screen.dart';
 import 'suppliers_screen.dart';
 import 'reports_screen.dart';
-import 'settings_screen.dart';
 
 class MainScreen extends StatelessWidget {
   const MainScreen({super.key});
@@ -25,7 +24,6 @@ class MainScreen extends StatelessWidget {
               SalesScreen(),
               SuppliersScreen(),
               ReportsScreen(),
-              SettingsScreen(),
             ],
           ),
           bottomNavigationBar: Consumer<NotificationProvider>(
@@ -56,38 +54,6 @@ class MainScreen extends StatelessWidget {
                   const BottomNavigationBarItem(
                     icon: Icon(Icons.analytics),
                     label: 'Raporlar',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Stack(
-                      children: [
-                        const Icon(Icons.settings),
-                        if (notificationProvider.unreadCount > 0)
-                          Positioned(
-                            right: 0,
-                            top: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 12,
-                                minHeight: 12,
-                              ),
-                              child: Text(
-                                '${notificationProvider.unreadCount}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    label: 'Ayarlar',
                   ),
                 ],
               );

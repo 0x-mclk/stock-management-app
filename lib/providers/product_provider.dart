@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/product.dart';
 import '../services/data_service.dart';
+import 'notification_provider.dart';
 
 class ProductProvider extends ChangeNotifier {
   List<Product> _products = [];
@@ -9,6 +10,12 @@ class ProductProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isInitialized = false;
   final DataService _dataService = DataService();
+  NotificationProvider? _notificationProvider;
+
+  // NotificationProvider referansını set etmek için
+  void setNotificationProvider(NotificationProvider notificationProvider) {
+    _notificationProvider = notificationProvider;
+  }
 
   List<Product> get products =>
       _filteredProducts.isEmpty && _searchQuery.isEmpty
@@ -26,6 +33,10 @@ class ProductProvider extends ChangeNotifier {
       _products = await _dataService.loadProducts();
       _isInitialized = true;
       _filterProducts();
+      
+      // Stok kontrolü yap ve bildirimleri güncelle
+      _notificationProvider?.checkLowStockProducts(_products);
+      
       notifyListeners();
     } catch (e) {
       // // Debug print removed // Removed for production
@@ -64,6 +75,10 @@ class ProductProvider extends ChangeNotifier {
       if (index != -1) {
         _products[index] = product;
         _filterProducts();
+        
+        // Stok kontrolü yap ve bildirimleri güncelle
+        _notificationProvider?.checkLowStockProducts(_products);
+        
         notifyListeners();
       }
     } catch (e) {

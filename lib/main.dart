@@ -81,10 +81,16 @@ class StockManagementApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AppProvider()),
-        ChangeNotifierProvider(create: (_) => ProductProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProxyProvider<NotificationProvider, ProductProvider>(
+          create: (_) => ProductProvider(),
+          update: (_, notificationProvider, productProvider) {
+            productProvider?.setNotificationProvider(notificationProvider);
+            return productProvider ?? ProductProvider();
+          },
+        ),
         ChangeNotifierProvider(create: (_) => SalesProvider()),
         ChangeNotifierProvider(create: (_) => SupplierProvider()),
-        ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => ConnectivityService()),
         ChangeNotifierProvider(create: (_) => OfflineService()),
       ],

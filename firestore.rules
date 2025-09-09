@@ -41,28 +41,34 @@ service cloud.firestore {
     match /stores/{storeId}/members/{memberId} {
       // Allow read if user is authenticated and one of:
       // 1. Store owner, 2. Member themselves, 3. Email matches (for invitations)
+      // 4. SPECIAL: Allow read for default_store for demo/development purposes
       allow read: if request.auth != null && 
         (isStoreOwnerSafe(storeId) || 
          request.auth.uid == memberId ||
+         storeId == 'default_store' ||
          (resource != null && request.auth.token.email == resource.data.email));
       
       // Allow create/write for store owner creating invitations and managing members
+      // SPECIAL: Allow write for default_store for demo purposes
       allow create, write: if request.auth != null && 
-        isStoreOwnerSafe(storeId);
+        (isStoreOwnerSafe(storeId) || storeId == 'default_store');
       
       // Allow update for:
       // 1. Store owner managing members
-      // 2. Users accepting/rejecting their own invitations
+      // 2. Users accepting/rejecting their own invitations  
+      // 3. SPECIAL: Allow update for default_store
       allow update: if request.auth != null && 
         (isStoreOwnerSafe(storeId) || 
+         storeId == 'default_store' ||
          (request.auth.uid == memberId && 
           request.resource.data.status in ['accepted', 'rejected']) ||
          (resource != null && request.auth.token.email == resource.data.email &&
           request.resource.data.status in ['accepted', 'rejected']));
       
       // Allow delete for store owner removing members
+      // SPECIAL: Allow delete for default_store
       allow delete: if request.auth != null && 
-        isStoreOwnerSafe(storeId);
+        (isStoreOwnerSafe(storeId) || storeId == 'default_store');
     }
 
     // Real-time data collection for live features
@@ -77,11 +83,33 @@ service cloud.firestore {
         (isStoreOwnerSafe(storeId) || isStoreMember(storeId));
     }
     
-    // Store invitations - users can read their own invitations
+    // User activity tracking for real-time team status - CRITICAL FOR TEAM FEATURES
+    match /user_activity/{activityId} {
+      // Allow read for authenticated users to see online team members
+      allow read: if request.auth != null;
+      
+      // Allow write for authenticated users to update their own activity
+      allow write: if request.auth != null && 
+        (request.resource.data.userId == request.auth.uid ||
+         resource.data.userId == request.auth.uid);
+    }
+    
+    // Store invitations - for new registration system
     match /store_invitations/{invitationId} {
-      allow read: if request.auth != null && 
-                     request.auth.token.email == resource.data.inviteeEmail;
-      allow write: if request.auth != null && isStoreOwner(resource.data.storeId);
+      // Allow read for authenticated users (especially during registration check)
+      allow read: if request.auth != null;
+      
+      // Allow create for authenticated users (any user can create invitation for testing)
+      allow create: if request.auth != null;
+      
+      // Allow update/delete for authenticated users
+      allow update, delete: if request.auth != null;
+    }
+    
+    // Allow users to query store_invitations by email during registration
+    // This is needed for the invitation checking during registration
+    match /store_invitations/{document=**} {
+      allow read: if request.auth != null;
     }
     
     // Admin controls - public read for banned users check, admin write

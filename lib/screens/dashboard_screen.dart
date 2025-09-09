@@ -7,12 +7,12 @@ import '../providers/supplier_provider.dart';
 import '../providers/app_provider.dart';
 import '../providers/notification_provider.dart';
 import '../utils/currency_formatter.dart';
-import '../widgets/multi_user_indicators_widget.dart';
 import '../widgets/store_menu_widget.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'price_check_screen.dart';
 import 'notifications_screen.dart';
 import 'qr_product_analysis_screen.dart';
+import 'firebase_auth_screen.dart';
+import 'team_management_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -22,19 +22,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  Future<Map<String, dynamic>?> _getCurrentUser() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      return {
-        'uid': user.uid,
-        'email': user.email,
-        'storeId':
-            'default_store', // Bu kısım gerçek store ID ile değiştirilmeli
-      };
-    }
-    return null;
-  }
-
   @override
   void initState() {
     super.initState();
@@ -61,6 +48,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('Stok Takip - Ana Sayfa'),
         actions: [
+          // Firebase sync button - DEVRE DIŞI
+          Consumer<AppProvider>(
+            builder: (context, appProvider, child) {
+              return IconButton(
+                icon: const Icon(Icons.cloud_off, color: Colors.grey),
+                onPressed: null, // Devre dışı
+                tooltip: 'Giriş sistemi yenileniyor',
+              );
+            },
+          ),
           Consumer<NotificationProvider>(
             builder: (context, notificationProvider, child) {
               return IconButton(
@@ -120,35 +117,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildSummaryCards(context),
 
               const SizedBox(height: 24),
-
-              // Multi-User Indicators
-              FutureBuilder<Map<String, dynamic>?>(
-                future: _getCurrentUser(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData && snapshot.data != null) {
-                    final user = snapshot.data!;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Takım Durumu',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        MultiUserIndicatorsWidget(
-                          storeId: user['storeId'] ?? '',
-                          currentUserId: user['uid'] ?? '',
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
 
               // Quick Actions
               const Text(
@@ -335,6 +303,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           () => context.read<AppProvider>().setCurrentPage(2),
         ),
         _buildQuickActionButton(
+          'Takım Yönetimi',
+          Icons.group,
+          Colors.indigo,
+          () => _openTeamManagement(context),
+        ),
+        _buildQuickActionButton(
           'Ürün Analizi',
           Icons.analytics,
           Colors.teal,
@@ -405,10 +379,204 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _handleFirebaseSync(BuildContext context) async {
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+
+    if (!appProvider.isLoggedIn) {
+      // Show Firebase auth screen
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const FirebaseAuthScreen(),
+        ),
+      );
+      return;
+    }
+
+    // Show sync options dialog
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        child: Consumer<AppProvider>(
+          builder: (context, appProvider, child) {
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Bulut Senkronizasyonu',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Sync status
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: appProvider.isLoggedIn
+                          ? Colors.green.shade100
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          appProvider.isLoggedIn
+                              ? Icons.cloud_done
+                              : Icons.cloud_off,
+                          color: appProvider.isLoggedIn
+                              ? Colors.green
+                              : Colors.grey,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                appProvider.isLoggedIn
+                                    ? 'Firebase\'e bağlı'
+                                    : 'Firebase\'e bağlı değil',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w500),
+                              ),
+                              if (appProvider.lastSyncTime != null)
+                                Text(
+                                  'Son senkronizasyon: ${_formatDateTime(appProvider.lastSyncTime!)}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Sync buttons
+                  if (appProvider.isLoggedIn) ...[
+                    ListTile(
+                      leading: const Icon(Icons.sync),
+                      title: const Text('Tam Senkronizasyon'),
+                      subtitle:
+                          const Text('Yerel ve bulut verilerini senkronize et'),
+                      onTap: appProvider.isSyncing
+                          ? null
+                          : () async {
+                              Navigator.pop(context);
+                              await appProvider.performSync();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      appProvider.syncError != null
+                                          ? 'Senkronizasyon hatası: ${appProvider.syncError}'
+                                          : 'Senkronizasyon tamamlandı!',
+                                    ),
+                                    backgroundColor:
+                                        appProvider.syncError != null
+                                            ? Colors.red
+                                            : Colors.green,
+                                  ),
+                                );
+                              }
+                            },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.cloud_upload),
+                      title: const Text('Buluta Yükle'),
+                      subtitle: const Text('Yerel verileri buluta gönder'),
+                      onTap: appProvider.isSyncing
+                          ? null
+                          : () async {
+                              Navigator.pop(context);
+                              await appProvider.syncToCloud();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      appProvider.syncError != null
+                                          ? 'Yükleme hatası: ${appProvider.syncError}'
+                                          : 'Veriler buluta yüklendi!',
+                                    ),
+                                    backgroundColor:
+                                        appProvider.syncError != null
+                                            ? Colors.red
+                                            : Colors.green,
+                                  ),
+                                );
+                              }
+                            },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.cloud_download),
+                      title: const Text('Buluttan İndir'),
+                      subtitle: const Text(
+                          'Bulut verilerini yerel veritabanına indir'),
+                      onTap: appProvider.isSyncing
+                          ? null
+                          : () async {
+                              Navigator.pop(context);
+                              await appProvider.syncFromCloud();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      appProvider.syncError != null
+                                          ? 'İndirme hatası: ${appProvider.syncError}'
+                                          : 'Veriler buluttan indirildi!',
+                                    ),
+                                    backgroundColor:
+                                        appProvider.syncError != null
+                                            ? Colors.red
+                                            : Colors.green,
+                                  ),
+                                );
+                              }
+                            },
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.logout, color: Colors.red),
+                      title: const Text('Çıkış Yap',
+                          style: TextStyle(color: Colors.red)),
+                      subtitle:
+                          const Text('Farklı hesap ile giriş yapabilirsiniz'),
+                      onTap: () => _showLogoutDialog(context),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
   void _openPriceCheck(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const PriceCheckScreen(),
+      ),
+    );
+  }
+
+  void _openTeamManagement(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const TeamManagementScreen(),
       ),
     );
   }
@@ -419,5 +587,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (context) => const QRProductAnalysisScreen(),
       ),
     );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Çıkış Yap'),
+          content: const Text(
+              'Hesabınızdan çıkış yapmak istediğinizden emin misiniz?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              onPressed: () => _performLogout(context),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Çıkış Yap',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _performLogout(BuildContext context) async {
+    try {
+      // Dialog'u kapat
+      Navigator.of(context).pop();
+
+      // Loading göster
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Çıkış yapılıyor...'),
+              ],
+            ),
+          );
+        },
+      );
+
+      // Firebase'den çıkış yap
+      final appProvider = context.read<AppProvider>();
+      await appProvider.signOut();
+
+      // Loading dialog'unu kapat
+      if (mounted) Navigator.of(context).pop();
+
+      // Login screen'e git ve tüm geçmiş sayfaları temizle
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/login',
+          (Route<dynamic> route) => false,
+        );
+      }
+    } catch (e) {
+      // Loading dialog'unu kapat
+      if (mounted) Navigator.of(context).pop();
+
+      // Hata mesajı göster
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Çıkış yapılırken hata oluştu: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

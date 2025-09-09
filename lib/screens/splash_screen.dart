@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/offline_status_widget.dart';
 import '../providers/product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/supplier_provider.dart';
 import 'main_screen.dart';
+import 'new_registration_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -48,35 +50,41 @@ class _SplashScreenState extends State<SplashScreen> {
 
       // Debug print removed
 
-      // Navigate to main screen
+      // Navigate to new registration screen instead of main screen
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => const Scaffold(
-              body: Column(
-                children: [
-                  OfflineStatusWidget(),
-                  Expanded(child: MainScreen()),
-                ],
+        // Firebase Auth kontrolü - kullanıcı giriş yapmış mı?
+        final currentUser = FirebaseAuth.instance.currentUser;
+
+        if (currentUser != null) {
+          // Kullanıcı giriş yapmış, main screen'e git
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const Scaffold(
+                body: Column(
+                  children: [
+                    OfflineStatusWidget(),
+                    Expanded(child: MainScreen()),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
+          );
+        } else {
+          // Kullanıcı giriş yapmamış, kayıt ekranına git
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const NewRegistrationScreen(),
+            ),
+          );
+        }
       }
     } catch (e) {
       // Debug print removed
-      // Even if there's an error, navigate to main screen
+      // Even if there's an error, navigate to registration screen
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => const Scaffold(
-              body: Column(
-                children: [
-                  OfflineStatusWidget(),
-                  Expanded(child: MainScreen()),
-                ],
-              ),
-            ),
+            builder: (context) => const NewRegistrationScreen(),
           ),
         );
       }
@@ -154,7 +162,3 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 }
-
-
-
-

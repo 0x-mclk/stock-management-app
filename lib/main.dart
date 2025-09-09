@@ -13,6 +13,7 @@ import 'providers/supplier_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
+import 'screens/login_screen.dart';
 import 'services/database_service.dart';
 import 'services/notification_service.dart';
 import 'services/connectivity_service.dart';
@@ -99,6 +100,9 @@ class StockManagementApp extends StatelessWidget {
           return MaterialApp(
             title: 'Stok Takip',
             debugShowCheckedModeBanner: false,
+            routes: {
+              '/login': (context) => const LoginScreen(),
+            },
             theme: ThemeData(
               useMaterial3: true,
               colorScheme: ColorScheme.fromSeed(

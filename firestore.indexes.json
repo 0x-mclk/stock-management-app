@@ -10,6 +10,26 @@
       ]
     },
     {
+      "collectionGroup": "store_invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "storeId", "mode": "ASCENDING" },
+        { "fieldPath": "invitedAt", "mode": "DESCENDING" },
+        { "fieldPath": "__name__", "mode": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "store_invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "storeId", "mode": "ASCENDING" },
+        { "fieldPath": "status", "mode": "ASCENDING" },
+        { "fieldPath": "adminApprovalRequired", "mode": "ASCENDING" },
+        { "fieldPath": "invitedAt", "mode": "DESCENDING" },
+        { "fieldPath": "__name__", "mode": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "members",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

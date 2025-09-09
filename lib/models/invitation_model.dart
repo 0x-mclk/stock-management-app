@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum InvitationStatus { invited, accepted, rejected, pending, owner }
+enum InvitationStatus { invited, accepted, rejected, pending, owner, approved }
 
 enum UserRole { owner, manager, staff, partner }
 
@@ -20,6 +20,15 @@ class InvitationModel {
   final DateTime? lastActivity;
   final bool isActive;
 
+  // Yeni alanlar - Admin onaylama sistemi için
+  final bool emailSent;
+  final bool adminApprovalRequired;
+  final String? approvedBy;
+  final DateTime? approvedAt;
+  final String? rejectedBy;
+  final DateTime? rejectedAt;
+  final String? rejectionReason;
+
   InvitationModel({
     this.id,
     required this.userId,
@@ -35,6 +44,13 @@ class InvitationModel {
     this.respondedAt,
     this.lastActivity,
     this.isActive = true,
+    this.emailSent = false,
+    this.adminApprovalRequired = false,
+    this.approvedBy,
+    this.approvedAt,
+    this.rejectedBy,
+    this.rejectedAt,
+    this.rejectionReason,
   });
 
   /// Convert from Firestore document
@@ -62,6 +78,14 @@ class InvitationModel {
       respondedAt: data['respondedAt']?.toDate(),
       lastActivity: data['lastActivity']?.toDate(),
       isActive: data['isActive'] ?? true,
+      // Yeni alanlar
+      emailSent: data['emailSent'] ?? false,
+      adminApprovalRequired: data['adminApprovalRequired'] ?? false,
+      approvedBy: data['approvedBy'],
+      approvedAt: data['approvedAt']?.toDate(),
+      rejectedBy: data['rejectedBy'],
+      rejectedAt: data['rejectedAt']?.toDate(),
+      rejectionReason: data['rejectionReason'],
     );
   }
 
@@ -83,6 +107,14 @@ class InvitationModel {
       'lastActivity':
           lastActivity != null ? Timestamp.fromDate(lastActivity!) : null,
       'isActive': isActive,
+      // Yeni alanlar
+      'emailSent': emailSent,
+      'adminApprovalRequired': adminApprovalRequired,
+      'approvedBy': approvedBy,
+      'approvedAt': approvedAt != null ? Timestamp.fromDate(approvedAt!) : null,
+      'rejectedBy': rejectedBy,
+      'rejectedAt': rejectedAt != null ? Timestamp.fromDate(rejectedAt!) : null,
+      'rejectionReason': rejectionReason,
     };
   }
 
@@ -102,6 +134,13 @@ class InvitationModel {
     DateTime? respondedAt,
     DateTime? lastActivity,
     bool? isActive,
+    bool? emailSent,
+    bool? adminApprovalRequired,
+    String? approvedBy,
+    DateTime? approvedAt,
+    String? rejectedBy,
+    DateTime? rejectedAt,
+    String? rejectionReason,
   }) {
     return InvitationModel(
       id: id ?? this.id,
@@ -118,6 +157,14 @@ class InvitationModel {
       respondedAt: respondedAt ?? this.respondedAt,
       lastActivity: lastActivity ?? this.lastActivity,
       isActive: isActive ?? this.isActive,
+      emailSent: emailSent ?? this.emailSent,
+      adminApprovalRequired:
+          adminApprovalRequired ?? this.adminApprovalRequired,
+      approvedBy: approvedBy ?? this.approvedBy,
+      approvedAt: approvedAt ?? this.approvedAt,
+      rejectedBy: rejectedBy ?? this.rejectedBy,
+      rejectedAt: rejectedAt ?? this.rejectedAt,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
     );
   }
 
@@ -166,6 +213,8 @@ class InvitationModel {
         return 'Davet Edildi';
       case InvitationStatus.pending:
         return 'Bekliyor';
+      case InvitationStatus.approved:
+        return 'Onaylandı';
       case InvitationStatus.rejected:
         return 'Reddedildi';
     }

@@ -324,7 +324,8 @@ class FirebaseAuthService {
       case 'user-not-found':
         return 'Bu e-posta adresine sahip kullanıcı bulunamadı';
       case 'wrong-password':
-        return 'Hatalı şifre';
+      case 'invalid-credential':
+        return 'Hatalı e-posta veya şifre';
       case 'email-already-in-use':
         return 'Bu e-posta adresi zaten kullanılıyor';
       case 'invalid-email':
@@ -338,9 +339,20 @@ class FirebaseAuthService {
       case 'operation-not-allowed':
         return 'Bu işlem şu anda izin verilmiyor';
       case 'network-request-failed':
-        return 'Ağ bağlantısı hatası';
+        return 'İnternet bağlantısını kontrol edin';
+      case 'requires-recent-login':
+        return 'Bu işlem için tekrar giriş yapmanız gerekiyor';
+      case 'credential-already-in-use':
+        return 'Bu kimlik bilgileri başka bir hesap tarafından kullanılıyor';
+      case 'invalid-verification-code':
+        return 'Geçersiz doğrulama kodu';
+      case 'invalid-verification-id':
+        return 'Geçersiz doğrulama ID\'si';
+      case 'account-exists-with-different-credential':
+        return 'Bu e-posta adresi farklı giriş yöntemi ile kayıtlı';
       default:
-        return 'Bir hata oluştu: $errorCode';
+        debugPrint('Unknown Firebase Auth error: $errorCode');
+        return 'Giriş yapılırken bir hata oluştu. Lütfen tekrar deneyin.';
     }
   }
 }

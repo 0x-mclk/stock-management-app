@@ -294,7 +294,7 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
     await Future.delayed(const Duration(milliseconds: 150));
 
     navigator.pushNamedAndRemoveUntil(
-      '/welcome-back',
+      '/login',
       (route) => false,
     );
 
@@ -695,7 +695,3 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
     );
   }
 }
-
-
-
-

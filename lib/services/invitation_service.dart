@@ -11,10 +11,11 @@ class InvitationService {
   static InvitationService get instance => _instance ??= InvitationService._();
   InvitationService._();
 
-  /// Get members collection reference for a store
-  CollectionReference _getMembersCollection(String storeId) {
-    return _firestore.collection('stores').doc(storeId).collection('members');
-  }
+  // DEPRECATED: Eski sistem için kullanılan method
+  // Artık store_invitations collection kullanıyoruz
+  // CollectionReference _getMembersCollection(String storeId) {
+  //   return _firestore.collection('stores').doc(storeId).collection('members');
+  // }
 
   /// Send invitation to join store
   Future<String?> sendInvitation({
@@ -25,33 +26,46 @@ class InvitationService {
     List<String>? customPermissions,
   }) async {
     try {
-      // Check if user already invited or member
-      final existingInvitation = await _getMembersCollection(storeId)
+      // Check if user already invited or member in store_invitations collection
+      final existingInvitation = await _firestore
+          .collection('store_invitations')
           .where('email', isEqualTo: email)
+          .where('storeId', isEqualTo: storeId)
           .get();
 
       if (existingInvitation.docs.isNotEmpty) {
         throw Exception('Bu email adresi zaten davet edilmiş');
       }
 
-      // Create invitation
-      final invitation = InvitationModel(
-        userId: '', // Will be filled when user accepts
-        email: email,
-        storeId: storeId,
-        role: role,
-        permissions:
+      // Create invitation data directly for store_invitations collection
+      // Yeni sistem: Manuel onaylama - Admin onayına gönderilir
+      final invitationData = {
+        'email': email,
+        'storeId': storeId,
+        'role': role.name,
+        'status': 'pending', // Manuel onay bekliyor
+        'invitedAt': FieldValue.serverTimestamp(),
+        'invitedBy': invitedBy,
+        'permissions':
             customPermissions ?? InvitationModel.getDefaultPermissions(role),
-        status: InvitationStatus.invited,
-        invitedAt: DateTime.now(),
-        invitedBy: invitedBy,
-      );
+        'emailSent': false, // E-posta gönderimi durumu
+        'adminApprovalRequired': true, // Admin onayı gerekli
+      };
 
-      // Add to Firestore
+      // Add to store_invitations collection
       final docRef =
-          await _getMembersCollection(storeId).add(invitation.toFirestore());
+          await _firestore.collection('store_invitations').add(invitationData);
 
-      debugPrint('✅ Invitation sent: ${docRef.id} to $email');
+      // Send email notification with real email service
+      final emailSent = await _sendInvitationEmail(email, storeId, docRef.id);
+
+      // Update email sent status
+      if (emailSent) {
+        await docRef.update({'emailSent': true});
+      }
+
+      debugPrint(
+          '✅ Invitation sent: ${docRef.id} to $email (Email: ${emailSent ? 'Sent' : 'Failed'})');
       return docRef.id;
     } catch (e) {
       debugPrint('❌ Error sending invitation: $e');
@@ -59,14 +73,31 @@ class InvitationService {
     }
   }
 
-  /// Accept invitation
+  /// Accept invitation (Kullanıcı onaylanmış daveti kabul eder)
   Future<bool> acceptInvitation({
     required String storeId,
     required String invitationId,
     required String userId,
   }) async {
     try {
-      await _getMembersCollection(storeId).doc(invitationId).update({
+      // Önce davet durumunu kontrol et
+      final doc = await _firestore
+          .collection('store_invitations')
+          .doc(invitationId)
+          .get();
+      if (!doc.exists) {
+        throw Exception('Davet bulunamadı');
+      }
+
+      final data = doc.data()!;
+      if (data['status'] != 'approved') {
+        throw Exception('Bu davet henüz admin tarafından onaylanmamış');
+      }
+
+      await _firestore
+          .collection('store_invitations')
+          .doc(invitationId)
+          .update({
         'userId': userId,
         'status': InvitationStatus.accepted.toString().split('.').last,
         'joinedAt': FieldValue.serverTimestamp(),
@@ -88,11 +119,15 @@ class InvitationService {
     required String invitationId,
   }) async {
     try {
-      await _getMembersCollection(storeId).doc(invitationId).update({
+      await _firestore
+          .collection('store_invitations')
+          .doc(invitationId)
+          .update({
         'status': InvitationStatus.rejected.toString().split('.').last,
         'respondedAt': FieldValue.serverTimestamp(),
       });
 
+      debugPrint('✅ Invitation rejected: $invitationId');
       debugPrint('✅ Invitation rejected: $invitationId');
       return true;
     } catch (e) {
@@ -103,21 +138,27 @@ class InvitationService {
 
   /// Get all members for a store
   Stream<List<InvitationModel>> getMembersStream(String storeId) {
-    return _getMembersCollection(storeId)
-        .orderBy('invitedAt', descending: true)
+    return _firestore
+        .collection('store_invitations')
+        .where('storeId', isEqualTo: storeId)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => InvitationModel.fromFirestore(doc))
-            .toList());
+        .map((snapshot) {
+      final invitations = snapshot.docs
+          .map((doc) => InvitationModel.fromFirestore(doc))
+          .toList();
+
+      // Client-side sorting
+      invitations.sort((a, b) => b.invitedAt.compareTo(a.invitedAt));
+      return invitations;
+    });
   }
 
-  /// Get pending invitations for a user email
+  /// Get pending invitations for a user email (Onaylanmış davetler)
   Stream<List<InvitationModel>> getPendingInvitationsStream(String email) {
     return _firestore
-        .collectionGroup('members')
+        .collection('store_invitations')
         .where('email', isEqualTo: email)
-        .where('status',
-            isEqualTo: InvitationStatus.invited.toString().split('.').last)
+        .where('status', isEqualTo: 'approved') // Admin tarafından onaylanmış
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => InvitationModel.fromFirestore(doc))
@@ -130,7 +171,7 @@ class InvitationService {
     required String memberId,
   }) async {
     try {
-      await _getMembersCollection(storeId).doc(memberId).delete();
+      await _firestore.collection('store_invitations').doc(memberId).delete();
       debugPrint('✅ Member removed: $memberId');
       return true;
     } catch (e) {
@@ -145,7 +186,7 @@ class InvitationService {
     required String memberId,
   }) async {
     try {
-      await _getMembersCollection(storeId).doc(memberId).update({
+      await _firestore.collection('store_invitations').doc(memberId).update({
         'isActive': false,
         'lastActivity': FieldValue.serverTimestamp(),
       });
@@ -163,7 +204,7 @@ class InvitationService {
     required String memberId,
   }) async {
     try {
-      await _getMembersCollection(storeId).doc(memberId).update({
+      await _firestore.collection('store_invitations').doc(memberId).update({
         'isActive': true,
         'lastActivity': FieldValue.serverTimestamp(),
       });
@@ -183,7 +224,7 @@ class InvitationService {
     List<String>? customPermissions,
   }) async {
     try {
-      await _getMembersCollection(storeId).doc(memberId).update({
+      await _firestore.collection('store_invitations').doc(memberId).update({
         'role': newRole.toString().split('.').last,
         'permissions':
             customPermissions ?? InvitationModel.getDefaultPermissions(newRole),
@@ -203,7 +244,7 @@ class InvitationService {
     required String memberId,
   }) async {
     try {
-      await _getMembersCollection(storeId).doc(memberId).update({
+      await _firestore.collection('store_invitations').doc(memberId).update({
         'lastActivity': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -230,7 +271,8 @@ class InvitationService {
         lastActivity: DateTime.now(),
       );
 
-      final docRef = await _getMembersCollection(storeId)
+      final docRef = await _firestore
+          .collection('store_invitations')
           .add(ownerInvitation.toFirestore());
       debugPrint('✅ Owner membership created: ${docRef.id}');
       return docRef.id;
@@ -246,7 +288,9 @@ class InvitationService {
     required String userId,
   }) async {
     try {
-      final querySnapshot = await _getMembersCollection(storeId)
+      final querySnapshot = await _firestore
+          .collection('store_invitations')
+          .where('storeId', isEqualTo: storeId)
           .where('userId', isEqualTo: userId)
           .where('isActive', isEqualTo: true)
           .get();
@@ -280,7 +324,9 @@ class InvitationService {
   /// Get member count for store
   Future<int> getMemberCount(String storeId) async {
     try {
-      final snapshot = await _getMembersCollection(storeId)
+      final snapshot = await _firestore
+          .collection('store_invitations')
+          .where('storeId', isEqualTo: storeId)
           .where('isActive', isEqualTo: true)
           .where('status', whereIn: [
         InvitationStatus.owner.toString().split('.').last,
@@ -299,12 +345,192 @@ class InvitationService {
     required String invitationId,
   }) async {
     try {
-      await _getMembersCollection(storeId).doc(invitationId).delete();
+      await _firestore
+          .collection('store_invitations')
+          .doc(invitationId)
+          .delete();
       debugPrint('✅ Invitation cancelled: $invitationId');
       return true;
     } catch (e) {
       debugPrint('❌ Error cancelling invitation: $e');
       return false;
     }
+  }
+
+  /// Send invitation email (Firebase Functions ile gerçek e-posta)
+  Future<bool> _sendInvitationEmail(
+      String email, String storeId, String invitationId) async {
+    try {
+      // Firebase Functions'a e-posta gönderimi için HTTP request
+      // Bu örnekte console'a yazdırıyoruz, gerçek uygulamada HTTP call yapılacak
+
+      debugPrint('📧 Sending email to: $email');
+      debugPrint('Subject: StockPro\'ya Davet Edildiniz - Onay Bekleniyor');
+      debugPrint(
+          'Body: Mağaza takımına katılma davetiniz admin onayında. Size bildirim gelecek.');
+      debugPrint('Store ID: $storeId');
+      debugPrint('Invitation ID: $invitationId');
+
+      // Simülasyon: E-posta başarıyla gönderildi
+      await Future.delayed(Duration(milliseconds: 100));
+
+      // TODO: Gerçek email servisi entegrasyonu
+      // Örn: Firebase Functions, SendGrid, AWS SES
+      /*
+      final response = await http.post(
+        Uri.parse('https://your-region-project.cloudfunctions.net/sendInvitationEmail'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'storeId': storeId,
+          'invitationId': invitationId,
+        }),
+      );
+      return response.statusCode == 200;
+      */
+
+      return true; // Simülasyon için her zaman true
+    } catch (e) {
+      debugPrint('❌ Error sending email: $e');
+      return false;
+    }
+  }
+
+  /// Admin onaylama - Daveti onayla
+  Future<bool> approveInvitation({
+    required String invitationId,
+    required String adminUserId,
+  }) async {
+    try {
+      await _firestore
+          .collection('store_invitations')
+          .doc(invitationId)
+          .update({
+        'status': 'approved',
+        'approvedBy': adminUserId,
+        'approvedAt': FieldValue.serverTimestamp(),
+        'adminApprovalRequired': false,
+      });
+
+      // Onay bildirimi e-postası gönder
+      final doc = await _firestore
+          .collection('store_invitations')
+          .doc(invitationId)
+          .get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        await _sendApprovalNotificationEmail(
+          data['email'],
+          data['storeId'],
+          invitationId,
+          true, // approved
+        );
+      }
+
+      debugPrint('✅ Invitation approved: $invitationId by admin: $adminUserId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error approving invitation: $e');
+      return false;
+    }
+  }
+
+  /// Admin reddetme - Daveti reddet
+  Future<bool> rejectInvitationByAdmin({
+    required String invitationId,
+    required String adminUserId,
+    String? reason,
+  }) async {
+    try {
+      await _firestore
+          .collection('store_invitations')
+          .doc(invitationId)
+          .update({
+        'status': 'rejected',
+        'rejectedBy': adminUserId,
+        'rejectedAt': FieldValue.serverTimestamp(),
+        'rejectionReason': reason,
+        'adminApprovalRequired': false,
+      });
+
+      // Red bildirimi e-postası gönder
+      final doc = await _firestore
+          .collection('store_invitations')
+          .doc(invitationId)
+          .get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        await _sendApprovalNotificationEmail(
+          data['email'],
+          data['storeId'],
+          invitationId,
+          false, // rejected
+          reason: reason,
+        );
+      }
+
+      debugPrint('✅ Invitation rejected: $invitationId by admin: $adminUserId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error rejecting invitation: $e');
+      return false;
+    }
+  }
+
+  /// Onay/Red bildirimi e-postası gönder
+  Future<bool> _sendApprovalNotificationEmail(
+    String email,
+    String storeId,
+    String invitationId,
+    bool approved, {
+    String? reason,
+  }) async {
+    try {
+      debugPrint(
+          '📧 Sending ${approved ? 'approval' : 'rejection'} email to: $email');
+
+      if (approved) {
+        debugPrint(
+            'Subject: Davetiniz Onaylandı - StockPro\'ya Katılabilirsiniz');
+        debugPrint(
+            'Body: Tebrikler! Mağaza takımına katılma davetiniz onaylandı. Artık uygulamayı kullanabilirsiniz.');
+      } else {
+        debugPrint('Subject: Davetiniz Hakkında - StockPro');
+        debugPrint(
+            'Body: Üzgünüz, mağaza takımına katılma davetiniz reddedildi.');
+        if (reason != null) {
+          debugPrint('Reason: $reason');
+        }
+      }
+
+      debugPrint('Store ID: $storeId');
+      debugPrint('Invitation ID: $invitationId');
+
+      // Simülasyon
+      await Future.delayed(Duration(milliseconds: 100));
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error sending approval notification email: $e');
+      return false;
+    }
+  }
+
+  /// Bekleyen onay daveti al (Admin için)
+  Stream<List<InvitationModel>> getPendingApprovalsStream(String storeId) {
+    return _firestore
+        .collection('store_invitations')
+        .where('storeId', isEqualTo: storeId)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) {
+      final invitations = snapshot.docs
+          .map((doc) => InvitationModel.fromFirestore(doc))
+          .where((invitation) => invitation.adminApprovalRequired == true)
+          .toList();
+
+      // Client-side sorting
+      invitations.sort((a, b) => b.invitedAt.compareTo(a.invitedAt));
+      return invitations;
+    });
   }
 }

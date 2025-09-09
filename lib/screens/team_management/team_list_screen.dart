@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/invitation_model.dart';
 import '../../services/invitation_service.dart';
 import 'invite_partner_screen.dart';
@@ -24,129 +23,150 @@ class _TeamListScreenState extends State<TeamListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
           'Takım Yönetimi',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF2C3E50),
+            fontSize: 18,
           ),
         ),
-        backgroundColor: Color(0xFF1E88E5),
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
+        backgroundColor: Colors.white,
+        elevation: 1,
+        shadowColor: Colors.black.withOpacity(0.1),
+        iconTheme: const IconThemeData(color: Color(0xFF2C3E50)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.group_add),
-            onPressed: () => _navigateToInvite(),
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            child: IconButton(
+              icon: const Icon(Icons.person_add_outlined,
+                  color: Color(0xFF3498DB)),
+              onPressed: () => _navigateToInvite(),
+              tooltip: 'Yeni Üye Davet Et',
+            ),
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1E88E5),
-              Color(0xFF1976D2),
-              Colors.grey[50]!,
-            ],
-            stops: [0.0, 0.2, 0.2],
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Section
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.grey.shade200,
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3498DB).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.groups_outlined,
+                        color: Color(0xFF3498DB),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Takım Üyeleri',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF2C3E50),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Mağaza takımınızı profesyonelce yönetin',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-        child: Column(
-          children: [
-            // Header Card
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Color(0xFF1E88E5).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.groups,
-                      color: Color(0xFF1E88E5),
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Takım Üyeleri',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E88E5),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Mağaza takımınızı yönetin',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fadeIn(delay: 200.ms).slideY(begin: -0.2),
 
-            // Members List
-            Expanded(
+          // Members List
+          Expanded(
+            child: Container(
+              color: Colors.grey.shade50,
               child: StreamBuilder<List<InvitationModel>>(
                 stream: _invitationService.getMembersStream(widget.storeId),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(
+                    return const Center(
                       child: CircularProgressIndicator(
-                        color: Color(0xFF1E88E5),
+                        color: Color(0xFF3498DB),
+                        strokeWidth: 2,
                       ),
                     );
                   }
 
                   if (snapshot.hasError) {
                     return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: Colors.red,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Takım üyeleri yüklenemedi',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              color: Colors.red,
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(
+                                Icons.error_outline,
+                                size: 48,
+                                color: Colors.red.shade400,
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 24),
+                            Text(
+                              'Takım üyeleri yüklenemedi',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.red.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Lütfen daha sonra tekrar deneyin',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }
@@ -155,40 +175,60 @@ class _TeamListScreenState extends State<TeamListScreen> {
 
                   if (members.isEmpty) {
                     return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.group_outlined,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Henüz takım üyesi yok',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey,
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(
+                                Icons.groups_outlined,
+                                size: 48,
+                                color: Colors.grey.shade500,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'İlk takım üyesini davet edin',
-                            style: TextStyle(
-                              color: Colors.grey,
+                            const SizedBox(height: 24),
+                            Text(
+                              'Henüz takım üyesi bulunmuyor',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade700,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: _navigateToInvite,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Partner Davet Et'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Color(0xFF1E88E5),
-                              foregroundColor: Colors.white,
+                            const SizedBox(height: 8),
+                            Text(
+                              'İlk takım üyenizi davet ederek başlayın',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 14,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 32),
+                            ElevatedButton.icon(
+                              onPressed: _navigateToInvite,
+                              icon: const Icon(Icons.person_add_outlined,
+                                  size: 20),
+                              label: const Text('Takım Üyesi Davet Et'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3498DB),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 24, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 0,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }
@@ -204,105 +244,128 @@ class _TeamListScreenState extends State<TeamListScreen> {
                 },
               ),
             ),
+          ),
+        ],
+      ),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF3498DB).withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
+        child: FloatingActionButton(
+          onPressed: _navigateToInvite,
+          backgroundColor: const Color(0xFF3498DB),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(Icons.person_add, size: 24),
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToInvite,
-        backgroundColor: Color(0xFF1E88E5),
-        child: const Icon(Icons.person_add, color: Colors.white),
-      ).animate().scale(delay: 1000.ms),
     );
   }
 
   Widget _buildMemberCard(InvitationModel member, int index) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.grey.shade200,
+          width: 1,
+        ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: CircleAvatar(
-          backgroundColor: _getStatusColor(member.status),
-          child: Text(
-            member.email[0].toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: _getStatusColor(member.status).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _getStatusColor(member.status).withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              member.email[0].toUpperCase(),
+              style: TextStyle(
+                color: _getStatusColor(member.status),
+                fontWeight: FontWeight.w600,
+                fontSize: 18,
+              ),
             ),
           ),
         ),
         title: Text(
           member.email,
           style: const TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w600,
             fontSize: 16,
+            color: Color(0xFF2C3E50),
           ),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Color(0xFF1E88E5).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    member.roleDisplayName,
-                    style: const TextStyle(
-                      color: Color(0xFF1E88E5),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3498DB).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF3498DB).withOpacity(0.3),
+                    width: 1,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color:
-                        _getStatusColor(member.status).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    member.statusDisplayName,
-                    style: TextStyle(
-                      color: _getStatusColor(member.status),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                child: Text(
+                  member.roleDisplayName,
+                  style: const TextStyle(
+                    color: Color(0xFF3498DB),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
-            ),
-            if (member.lastActivity != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Son aktiflik: ${_formatDate(member.lastActivity!)}',
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 12,
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _getStatusColor(member.status).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _getStatusColor(member.status).withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  member.statusDisplayName,
+                  style: TextStyle(
+                    color: _getStatusColor(member.status),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
-          ],
+          ),
         ),
         trailing: PopupMenuButton<String>(
+          icon: Icon(
+            Icons.more_vert,
+            color: Colors.grey.shade600,
+          ),
           onSelected: (value) => _handleMemberAction(value, member),
           itemBuilder: (context) => [
             if (member.status == InvitationStatus.invited)
@@ -352,39 +415,23 @@ class _TeamListScreenState extends State<TeamListScreen> {
           ],
         ),
       ),
-    )
-        .animate()
-        .fadeIn(delay: Duration(milliseconds: 300 + (index * 100)))
-        .slideX(begin: 0.2);
+    );
   }
 
   Color _getStatusColor(InvitationStatus status) {
     switch (status) {
       case InvitationStatus.owner:
-        return Colors.purple;
+        return const Color(0xFF8E44AD); // Professional purple
       case InvitationStatus.accepted:
-        return Colors.green;
+        return const Color(0xFF27AE60); // Professional green
       case InvitationStatus.invited:
-        return Colors.orange;
+        return const Color(0xFFE67E22); // Professional orange
       case InvitationStatus.pending:
-        return Colors.blue;
+        return const Color(0xFF3498DB); // Professional blue
       case InvitationStatus.rejected:
-        return Colors.red;
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inMinutes < 1) {
-      return 'Şimdi';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes} dakika önce';
-    } else if (difference.inDays < 1) {
-      return '${difference.inHours} saat önce';
-    } else {
-      return '${difference.inDays} gün önce';
+        return const Color(0xFFE74C3C); // Professional red
+      case InvitationStatus.approved:
+        return const Color(0xFF16A085); // Professional teal
     }
   }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dashboard_screen.dart';
+import 'main_screen.dart';
 
 class StoreSetupScreen extends StatefulWidget {
   const StoreSetupScreen({super.key});
@@ -62,7 +62,7 @@ class _StoreSetupScreenState extends State<StoreSetupScreen> {
 
         // Dashboard'a yönlendir
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          MaterialPageRoute(builder: (context) => const MainScreen()),
           (route) => false,
         );
       }

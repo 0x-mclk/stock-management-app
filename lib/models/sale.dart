@@ -7,6 +7,7 @@ enum PaymentMethod {
 
 class Sale {
   final String? id;
+  final String storeId; // ✅ Store isolation için eklendi
   final String? supplierId;
   final double totalAmount;
   final double discount;
@@ -18,6 +19,7 @@ class Sale {
 
   Sale({
     this.id,
+    required this.storeId, // ✅ Zorunlu alan
     this.supplierId,
     required this.totalAmount,
     this.discount = 0.0,
@@ -33,6 +35,7 @@ class Sale {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'store_id': storeId, // ✅ Store ID eklendi
       'supplier_id': supplierId,
       'total_amount': totalAmount,
       'discount': discount,
@@ -46,6 +49,7 @@ class Sale {
   factory Sale.fromMap(Map<String, dynamic> map) {
     return Sale(
       id: map['id']?.toString(),
+      storeId: map['store_id'] ?? '', // ✅ Store ID eklendi
       supplierId: map['supplier_id']?.toString(),
       totalAmount: (map['total_amount'] ?? 0).toDouble(),
       discount: (map['discount'] ?? 0).toDouble(),
@@ -62,6 +66,7 @@ class Sale {
 
   Sale copyWith({
     String? id,
+    String? storeId,
     String? supplierId,
     double? totalAmount,
     double? discount,
@@ -73,6 +78,7 @@ class Sale {
   }) {
     return Sale(
       id: id ?? this.id,
+      storeId: storeId ?? this.storeId, // ✅ Store ID eklendi
       supplierId: supplierId ?? this.supplierId,
       totalAmount: totalAmount ?? this.totalAmount,
       discount: discount ?? this.discount,
@@ -151,7 +157,3 @@ class SaleItem {
     );
   }
 }
-
-
-
-

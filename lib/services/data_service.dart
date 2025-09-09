@@ -27,6 +27,24 @@ class DataService {
     }
   }
 
+  // ✅ Store ID ile filtrelenmiş ürünleri yükle
+  Future<List<Product>> loadProductsByStore(String storeId,
+      {int? limit}) async {
+    try {
+      final maps = await _databaseService.query(
+        'products',
+        where: 'store_id = ?',
+        whereArgs: [storeId],
+        orderBy: 'created_at DESC',
+        limit: limit ?? 50, // Default limit 50 items to save memory
+      );
+      return maps.map((map) => Product.fromMap(map)).toList();
+    } catch (e) {
+      // // Debug print removed // Removed for production
+      return [];
+    }
+  }
+
   Future<void> saveProduct(Product product) async {
     try {
       if (product.id?.isEmpty ?? true) {
@@ -66,6 +84,40 @@ class DataService {
     try {
       final maps = await _databaseService.query(
         'sales',
+        orderBy: 'created_at DESC',
+        limit: limit, // limit null ise tüm kayıtları getir
+      );
+
+      List<Sale> sales = [];
+
+      for (final map in maps) {
+        // Load sale items for each sale
+        final itemMaps = await _databaseService.query(
+          'sale_items',
+          where: 'sale_id = ?',
+          whereArgs: [map['id']],
+        );
+
+        final items =
+            itemMaps.map((itemMap) => SaleItem.fromMap(itemMap)).toList();
+        final sale = Sale.fromMap(map).copyWith(items: items);
+        sales.add(sale);
+      }
+
+      return sales;
+    } catch (e) {
+      // // Debug print removed // Removed for production
+      return [];
+    }
+  }
+
+  // ✅ Store ID ile filtrelenmiş satışları yükle
+  Future<List<Sale>> loadSalesByStore(String storeId, {int? limit}) async {
+    try {
+      final maps = await _databaseService.query(
+        'sales',
+        where: 'store_id = ?',
+        whereArgs: [storeId],
         orderBy: 'created_at DESC',
         limit: limit, // limit null ise tüm kayıtları getir
       );
@@ -211,6 +263,22 @@ class DataService {
     try {
       final maps =
           await _databaseService.query('suppliers', orderBy: 'created_at DESC');
+      return maps.map((map) => Supplier.fromMap(map)).toList();
+    } catch (e) {
+      // // Debug print removed // Removed for production
+      return [];
+    }
+  }
+
+  // ✅ Store ID ile filtrelenmiş tedarikçileri yükle
+  Future<List<Supplier>> loadSuppliersByStore(String storeId) async {
+    try {
+      final maps = await _databaseService.query(
+        'suppliers',
+        where: 'store_id = ?',
+        whereArgs: [storeId],
+        orderBy: 'created_at DESC',
+      );
       return maps.map((map) => Supplier.fromMap(map)).toList();
     } catch (e) {
       // // Debug print removed // Removed for production

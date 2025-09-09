@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/invitation_service.dart';
 import 'store_setup_screen.dart';
-import 'dashboard_screen.dart';
+import 'main_screen.dart';
 
 class NewRegistrationScreen extends StatefulWidget {
   const NewRegistrationScreen({super.key});
@@ -81,7 +81,7 @@ class _NewRegistrationScreenState extends State<NewRegistrationScreen> {
       final querySnapshot = await FirebaseFirestore.instance
           .collection('store_invitations')
           .where('email', isEqualTo: email)
-          .where('status', isEqualTo: 'accepted')
+          .where('status', whereIn: ['pending', 'accepted']) // ✅ Both status kontrolü
           .limit(1)
           .get();
 
@@ -154,7 +154,7 @@ class _NewRegistrationScreenState extends State<NewRegistrationScreen> {
 
       // 5. Dashboard'a git - artık mağaza sahibi ile birlikte çalışıyor
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        MaterialPageRoute(builder: (context) => const MainScreen()),
         (route) => false,
       );
     }

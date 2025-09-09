@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ SharedPreferences import
 import '../services/auth_service.dart';
 import '../screens/settings_screen.dart';
-import '../screens/store_management_screen.dart';
-import '../screens/profile_management_screen.dart';
+import '../screens/my_store_screen.dart';
 
 class StoreMenuWidget extends StatefulWidget {
   const StoreMenuWidget({super.key});
@@ -13,6 +15,7 @@ class StoreMenuWidget extends StatefulWidget {
 
 class _StoreMenuWidgetState extends State<StoreMenuWidget> {
   String _userName = 'Kullanıcı';
+  String _userEmail = '';
   String _storeName = 'Mağaza';
 
   @override
@@ -23,15 +26,29 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
 
   Future<void> _loadUserInfo() async {
     try {
-      final userSession = AuthService.instance.currentSession;
-      if (userSession != null) {
+      // ✅ Firebase Auth'dan kullanıcı bilgilerini al
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
         setState(() {
-          _userName = userSession.userName;
-          _storeName = userSession.storeName;
+          _userEmail = currentUser.email ?? '';
         });
+
+        // ✅ Firestore'dan kullanıcı detaylarını al
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get();
+            
+        if (userDoc.exists) {
+          final userData = userDoc.data()!;
+          setState(() {
+            _userName = userData['name'] ?? 'Kullanıcı';
+            _storeName = userData['name'] ?? 'Mağaza'; // Ad = Mağaza adı (sadelik için)
+          });
+        }
       }
     } catch (e) {
-      // Debug print removed
+      // Debug print removed - Hata durumunda varsayılan değerler kullanılır
     }
   }
 
@@ -46,36 +63,15 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
           // Ana Özellikler
           _buildMenuItem(
             icon: Icons.store,
-            title: 'Mağaza Yönetimi',
+            title: 'Mağazam',
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const StoreManagementScreen(),
+                  builder: (context) => const MyStoreScreen(),
                 ),
               );
-            },
-          ),
-          _buildMenuItem(
-            icon: Icons.person,
-            title: 'Profil Yönetimi',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ProfileManagementScreen(),
-                ),
-              );
-            },
-          ),
-          _buildMenuItem(
-            icon: Icons.business_center,
-            title: 'Mağaza Bilgileri',
-            onTap: () {
-              Navigator.pop(context);
-              _showStoreInfoDialog(context);
             },
           ),
 
@@ -151,31 +147,53 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly, // ✅ Eşit dağılım
         children: [
           CircleAvatar(
-            radius: 30,
+            radius: 25, // ✅ Boyut küçültüldü
             backgroundColor: Colors.white,
             child: Icon(
               Icons.person,
-              size: 35,
+              size: 30, // ✅ Icon boyutu küçültüldü
               color: Theme.of(context).primaryColor,
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            _userName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            _storeName,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _userName,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16, // ✅ Font boyutu küçültüldü
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1, // ✅ Tek satır sınırı
+                overflow: TextOverflow.ellipsis, // ✅ Overflow koruması
+              ),
+              if (_userEmail.isNotEmpty) ...[
+                const SizedBox(height: 2), // ✅ Daha küçük boşluk
+                Text(
+                  _userEmail,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11, // ✅ Daha küçük font
+                  ),
+                  maxLines: 1, // ✅ Tek satır sınırı
+                  overflow: TextOverflow.ellipsis, // ✅ Overflow koruması
+                ),
+              ],
+              const SizedBox(height: 2), // ✅ Daha küçük boşluk
+              Text(
+                '🏪 $_storeName',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12, // ✅ Font boyutu küçültüldü
+                ),
+                maxLines: 1, // ✅ Tek satır sınırı
+                overflow: TextOverflow.ellipsis, // ✅ Overflow koruması
+              ),
+            ],
           ),
         ],
       ),
@@ -304,9 +322,9 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
 
   static void _performBackgroundLogout(
       ScaffoldMessengerState scaffoldMessenger) {
-    // AuthService logout'u arkaplanda çalıştır
-    AuthService.instance.logout().then((result) {
-      if (result.success) {
+    // Çoklu logout işlemi: hem AuthService hem Firebase Auth
+    _performCompleteLogout().then((result) {
+      if (result) {
         // Minimal success feedback (opsiyonel)
         scaffoldMessenger.showSnackBar(
           SnackBar(
@@ -329,144 +347,44 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
       }
     }).catchError((e) {
       // Silent error handling in production
+      print('❌ Logout error: $e');
     });
   }
 
-  void _showStoreInfoDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Row(
-          children: [
-            Icon(Icons.business_center, color: Colors.blue, size: 24),
-            SizedBox(width: 8),
-            Text('Mağaza Bilgileri', style: TextStyle(fontSize: 18)),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildInfoRow('Mağaza Adı', _storeName),
-              const SizedBox(height: 12),
-              _buildInfoRow('Sahip', _userName),
-              const SizedBox(height: 12),
-              _buildInfoRow('Durum', 'Aktif'),
-              const SizedBox(height: 12),
-              _buildInfoRow('Plan', 'Ücretsiz'),
-              const SizedBox(height: 12),
-              _buildInfoRow('Kayıt Tarihi', '15 Ağustos 2024'),
-              const SizedBox(height: 12),
-              _buildInfoRow('Son Güncelleme', 'Bugün'),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.info_outline,
-                            color: Colors.blue, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Mağaza İstatistikleri',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue[800],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _buildStatRow('Toplam Ürün', '150'),
-                    _buildStatRow('Aktif Ürün', '140'),
-                    _buildStatRow('Düşük Stok', '12'),
-                    _buildStatRow('Bu Ay Satış', '₺15,250'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Kapat'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const StoreManagementScreen(),
-                ),
-              );
-            },
-            child: const Text('Düzenle'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 100,
-          child: Text(
-            '$label:',
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[700],
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[700],
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
+  // ✅ Hem SharedPreferences hem Firebase Auth'dan çıkış
+  static Future<bool> _performCompleteLogout() async {
+    try {
+      print('🔄 Starting complete logout process...');
+      
+      // 1. SharedPreferences temizleme
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear(); // Tüm verileri temizle
+      print('✅ SharedPreferences cleared');
+      
+      // 2. Firebase Auth çıkışı
+      try {
+        await FirebaseAuth.instance.signOut();
+        print('✅ Firebase Auth signed out');
+      } catch (firebaseError) {
+        print('⚠️ Firebase signOut error: $firebaseError');
+        // Firebase hatası olsa bile devam et
+      }
+      
+      // 3. AuthService logout çağrısı
+      try {
+        final authResult = await AuthService.instance.logout(clearRemembered: true);
+        print('✅ AuthService logout: ${authResult.success}');
+      } catch (authError) {
+        print('⚠️ AuthService logout error: $authError');
+        // AuthService hatası olsa bile devam et
+      }
+      
+      print('✅ Complete logout finished successfully');
+      return true;
+    } catch (e) {
+      print('❌ Complete logout failed: $e');
+      return false;
+    }
   }
 
   void _showPaymentMethodsDialog(BuildContext context) {

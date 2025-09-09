@@ -494,6 +494,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     double.tryParse(purchasePriceController.text) ?? 0,
                 stock: int.parse(stockController.text),
                 minStock: int.parse(minStockController.text),
+                storeId: '', // ✅ Provider otomatik atayacak
               );
 
               if (isEditing) {
@@ -659,6 +660,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             stock: stock,
             minStock: minStock,
             description: description.isEmpty ? null : description,
+            storeId: '', // ✅ Provider otomatik atayacak
           );
 
           await productProvider.addProduct(product);

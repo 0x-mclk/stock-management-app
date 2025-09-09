@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ Firebase Auth eklendi
 import '../models/product.dart';
 import '../services/data_service.dart';
 import 'notification_provider.dart';
@@ -11,6 +12,12 @@ class ProductProvider extends ChangeNotifier {
   bool _isInitialized = false;
   final DataService _dataService = DataService();
   NotificationProvider? _notificationProvider;
+
+  // ✅ Current store ID getter
+  String get currentStoreId {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    return currentUser != null ? 'store_${currentUser.uid}' : '';
+  }
 
   // NotificationProvider referansını set etmek için
   void setNotificationProvider(NotificationProvider notificationProvider) {
@@ -30,7 +37,13 @@ class ProductProvider extends ChangeNotifier {
   Future<void> loadProducts() async {
     setLoading(true);
     try {
-      _products = await _dataService.loadProducts();
+      // ✅ Store ID ile filtrelenmiş ürünleri yükle
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+
+      _products = await _dataService.loadProductsByStore(storeId);
       _isInitialized = true;
       _filterProducts();
 
@@ -60,7 +73,14 @@ class ProductProvider extends ChangeNotifier {
 
   Future<void> addProduct(Product product) async {
     try {
-      await _dataService.saveProduct(product);
+      // ✅ Store ID'sini otomatik ata
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+
+      final productWithStore = product.copyWith(storeId: storeId);
+      await _dataService.saveProduct(productWithStore);
       await refreshProducts(); // Force refresh to get updated data
     } catch (e) {
       // // Debug print removed // Removed for production
@@ -70,6 +90,15 @@ class ProductProvider extends ChangeNotifier {
 
   Future<void> updateProduct(Product product) async {
     try {
+      // ✅ Store ID kontrolü - güvenlik için
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+      if (product.storeId != storeId) {
+        throw Exception('Bu ürünü düzenleme yetkiniz yok');
+      }
+
       await _dataService.saveProduct(product);
       final index = _products.indexWhere((p) => p.id == product.id);
       if (index != -1) {
@@ -89,6 +118,19 @@ class ProductProvider extends ChangeNotifier {
 
   Future<void> removeProduct(String productId) async {
     try {
+      // ✅ Store ID kontrolü - güvenlik için
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+
+      // Ürünün bu store'a ait olduğunu kontrol et
+      final product = _products.firstWhere((p) => p.id == productId,
+          orElse: () => throw Exception('Ürün bulunamadı'));
+      if (product.storeId != storeId) {
+        throw Exception('Bu ürünü silme yetkiniz yok');
+      }
+
       await _dataService.deleteProduct(productId);
       _products.removeWhere((p) => p.id == productId);
       _filterProducts();

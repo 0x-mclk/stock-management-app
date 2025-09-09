@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/supplier.dart';
 import '../services/data_service.dart';
 
@@ -10,11 +11,23 @@ class SupplierProvider extends ChangeNotifier {
   List<Supplier> get suppliers => _suppliers;
   bool get isLoading => _isLoading;
 
+  // ✅ Store ID getter - Firebase Auth kullanarak
+  String get currentStoreId {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    return currentUser != null ? 'store_${currentUser.uid}' : '';
+  }
+
   // Initialize and load data from database
   Future<void> loadSuppliers() async {
     setLoading(true);
     try {
-      _suppliers = await _dataService.loadSuppliers();
+      // ✅ Store ID ile filtrelenmiş tedarikçileri yükle
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+
+      _suppliers = await _dataService.loadSuppliersByStore(storeId);
       notifyListeners();
     } catch (e) {
       // // Debug print removed // Removed for production
@@ -32,7 +45,14 @@ class SupplierProvider extends ChangeNotifier {
 
   Future<void> addSupplier(Supplier supplier) async {
     try {
-      await _dataService.saveSupplier(supplier);
+      // ✅ Store ID'sini otomatik ata
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+
+      final supplierWithStore = supplier.copyWith(storeId: storeId);
+      await _dataService.saveSupplier(supplierWithStore);
       // Veritabanından güncel veriyi yükle
       await loadSuppliers();
     } catch (e) {
@@ -43,6 +63,15 @@ class SupplierProvider extends ChangeNotifier {
 
   Future<void> updateSupplier(Supplier supplier) async {
     try {
+      // ✅ Store ID kontrolü - güvenlik için
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+      if (supplier.storeId != storeId) {
+        throw Exception('Bu tedarikçiyi düzenleme yetkiniz yok');
+      }
+
       await _dataService.saveSupplier(supplier);
       final index = _suppliers.indexWhere((s) => s.id == supplier.id);
       if (index != -1) {
@@ -57,6 +86,19 @@ class SupplierProvider extends ChangeNotifier {
 
   Future<void> removeSupplier(String supplierId) async {
     try {
+      // ✅ Store ID kontrolü - güvenlik için
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+
+      // Tedarikçinin bu store'a ait olduğunu kontrol et
+      final supplier = _suppliers.firstWhere((s) => s.id == supplierId,
+          orElse: () => throw Exception('Tedarikçi bulunamadı'));
+      if (supplier.storeId != storeId) {
+        throw Exception('Bu tedarikçiyi silme yetkiniz yok');
+      }
+
       await _dataService.deleteSupplier(supplierId);
       _suppliers.removeWhere((s) => s.id == supplierId);
       notifyListeners();
@@ -197,7 +239,3 @@ class SupplierProvider extends ChangeNotifier {
     }
   }
 }
-
-
-
-

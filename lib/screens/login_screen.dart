@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ Beni hatırla için
 import 'dashboard_screen.dart';
 import 'store_setup_screen.dart';
+import 'main_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -28,11 +30,34 @@ class _LoginScreenState extends State<LoginScreen>
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _rememberMe = false; // ✅ Beni hatırla checkbox'ı için
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _checkAutoLogin(); // ✅ Otomatik giriş kontrolü
+  }
+
+  // ✅ Otomatik giriş kontrolü
+  Future<void> _checkAutoLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rememberMe = prefs.getBool('remember_me') ?? false;
+    final savedEmail = prefs.getString('saved_email');
+    
+    if (rememberMe && savedEmail != null) {
+      // Firebase Auth zaten giriş yapmış kullanıcıyı hatırlıyor mu kontrol et
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null && currentUser.email == savedEmail) {
+        print('🔄 Auto-login successful for: $savedEmail');
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainScreen()),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -91,20 +116,28 @@ class _LoginScreenState extends State<LoginScreen>
   // Login.md ADIM 3C: Davet kontrol sistemi
   Future<Map<String, dynamic>?> _checkInvitation(String email) async {
     try {
+      print('🔍 Checking invitations for: $email');
+      
+      // ✅ Pending VE accepted invitations için kontrol (Firebase Console compatibility)
       final querySnapshot = await FirebaseFirestore.instance
           .collection('store_invitations')
           .where('email', isEqualTo: email)
-          .where('status',
-              isEqualTo:
-                  'accepted') // Login.md'ye göre 'accepted' status aranır
+          .where('status', whereIn: ['pending', 'accepted']) // ✅ Both status kontrolü
+          .limit(1)
           .get();
 
       if (querySnapshot.docs.isNotEmpty) {
-        return querySnapshot.docs.first.data();
+        final invitation = querySnapshot.docs.first.data();
+        final status = invitation['status'];
+        print('✅ Invitation found for: $email - Status: $status - Store: ${invitation['storeId']}');
+        return invitation;
       }
+      
+      print('🟡 No invitation found for: $email');
       return null;
     } catch (e) {
-      debugPrint('❌ Invitation check error: $e');
+      print('❌ Invitation check error: $e');
+      // Hata durumunda null döndür - Normal kayıt devam etsin
       return null;
     }
   }
@@ -113,19 +146,52 @@ class _LoginScreenState extends State<LoginScreen>
   Future<void> _handleInvitedUserRegistration(String email, String password,
       String name, String phone, Map<String, dynamic> invitation) async {
     try {
-      // 1. Firebase Authentication hesap oluştur
-      final userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+      print('🔵 Starting invited user registration for: $email');
 
-      final user = userCredential.user;
-      if (user == null) {
-        throw Exception('User creation failed');
-      }
-      final userId = user.uid;
       final storeId = invitation['storeId'];
       final role = invitation['role'] ?? 'staff';
 
-      // 2. User bilgilerini kaydet
+      // 1. Önce mevcut kullanıcı kontrolü
+      UserCredential? userCredential;
+      User? user;
+      String userId;
+
+      try {
+        // A. Yeni hesap oluşturmayı dene
+        userCredential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(email: email, password: password);
+        user = userCredential.user;
+        print('✅ New Firebase Auth account created');
+      } catch (authError) {
+        if (authError.toString().contains('email-already-in-use')) {
+          print('🟡 Email already exists, trying to sign in...');
+          
+          // B. Hesap zaten varsa giriş yap
+          try {
+            userCredential = await FirebaseAuth.instance
+                .signInWithEmailAndPassword(email: email, password: password);
+            user = userCredential.user;
+            print('✅ Signed in with existing account');
+          } catch (signInError) {
+            print('❌ Sign in failed: $signInError');
+            throw Exception('Bu email zaten kayıtlı ancak şifre yanlış. Lütfen doğru şifreyi girin.');
+          }
+        } else {
+          print('❌ Firebase Auth error: $authError');
+          throw authError;
+        }
+      }
+
+      if (user == null) {
+        print('❌ User is null after auth');
+        throw Exception('Authentication failed - null user');
+      }
+
+      userId = user.uid;
+      print('✅ User authenticated with UID: $userId');
+
+      print('🔵 Saving/updating user data to Firestore...');
+      // 2. User bilgilerini kaydet/güncelle
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
         'email': email,
         'name': name,
@@ -134,8 +200,9 @@ class _LoginScreenState extends State<LoginScreen>
         'storeId': storeId, // Davet edilen mağaza
         'createdAt': FieldValue.serverTimestamp(),
         'isActive': true,
-      });
+      }, SetOptions(merge: true)); // ✅ Merge ile mevcut verileri korur
 
+      print('🔵 Adding user to store members...');
       // 3. Mağaza üyelerine ekle
       await FirebaseFirestore.instance
           .collection('stores')
@@ -149,14 +216,41 @@ class _LoginScreenState extends State<LoginScreen>
         'status': 'accepted',
         'userId': userId,
         'joinedAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true)); // ✅ Merge ile mevcut verileri korur
+
+      print('🔵 Updating invitation status...');
+      // 4. ✅ Davet durumunu 'accepted' yap ve invitation ID'yi bul
+      try {
+        final invitationQuery = await FirebaseFirestore.instance
+            .collection('store_invitations')
+            .where('email', isEqualTo: email)
+            .where('status', isEqualTo: 'pending')
+            .limit(1)
+            .get();
+
+        if (invitationQuery.docs.isNotEmpty) {
+          final invitationDoc = invitationQuery.docs.first;
+          await invitationDoc.reference.update({
+            'status': 'accepted',
+            'acceptedAt': FieldValue.serverTimestamp(),
+            'userId': userId,
+          });
+          print('✅ Invitation status updated to accepted');
+        }
+      } catch (invitationError) {
+        print('⚠️ Could not update invitation status: $invitationError');
+        // Devam et - kullanıcı kayıdı başarılı
+      }
+
+      print('✅ Invited user registration completed successfully');
 
       // 4. Provider'ları güncelle ve yönlendir
       if (mounted) {
+        print('🔵 Navigating to dashboard...');
         // 5. Direkt dashboard'a git - Artık mağaza sahibi ile birlikte çalışıyor!
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          MaterialPageRoute(builder: (context) => const MainScreen()),
         );
 
         _showSuccess('Hoş geldiniz! Mağaza takımına katıldınız.');
@@ -171,17 +265,30 @@ class _LoginScreenState extends State<LoginScreen>
   Future<void> _handleNormalUserRegistration(
       String email, String password, String name, String phone) async {
     try {
-      // 1. Firebase Authentication hesap oluştur
-      final userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+      print('🔵 Starting normal user registration for: $email');
+
+      // 1. Firebase Authentication hesap oluştur - Güvenli wrapper
+      UserCredential? userCredential;
+      try {
+        userCredential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(email: email, password: password);
+        print('✅ Firebase Auth successful for normal user');
+      } catch (authError) {
+        print('❌ Firebase Auth error: $authError');
+        throw authError;
+      }
 
       final user = userCredential.user;
       if (user == null) {
-        throw Exception('User creation failed');
+        print('❌ User is null after creation');
+        throw Exception('User creation failed - null user');
       }
+
+      print('✅ Normal user created with UID: ${user.uid}');
       final userId = user.uid;
       final storeId = 'store_$userId'; // YENİ mağaza ID'si
 
+      print('🔵 Saving normal user data to Firestore...');
       // 2. User bilgilerini kaydet
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
         'email': email,
@@ -193,6 +300,7 @@ class _LoginScreenState extends State<LoginScreen>
         'isActive': true,
       });
 
+      print('🔵 Creating new store...');
       // 3. YENİ mağaza oluştur
       await FirebaseFirestore.instance.collection('stores').doc(storeId).set({
         'ownerId': userId,
@@ -203,6 +311,7 @@ class _LoginScreenState extends State<LoginScreen>
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      print('🔵 Adding owner to store members...');
       // 4. Kendini mağaza sahibi olarak ekle
       await FirebaseFirestore.instance
           .collection('stores')
@@ -218,8 +327,11 @@ class _LoginScreenState extends State<LoginScreen>
         'joinedAt': FieldValue.serverTimestamp(),
       });
 
+      print('✅ Normal user registration completed successfully');
+
       // 5. Yönlendir
       if (mounted) {
+        print('🔵 Navigating to store setup...');
         // 6. Mağaza kurulum sayfasına git - Mağaza bilgilerini dolduracak!
         Navigator.pushReplacement(
           context,
@@ -261,10 +373,23 @@ class _LoginScreenState extends State<LoginScreen>
 
       print('✅ Login successful for: ${user.email}');
 
+      // ✅ Beni hatırla özelliği
+      if (_rememberMe) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('remember_me', true);
+        await prefs.setString('saved_email', email);
+        print('💾 User credentials saved for auto-login');
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('remember_me');
+        await prefs.remove('saved_email');
+        print('🗑️ User credentials cleared');
+      }
+
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          MaterialPageRoute(builder: (context) => const MainScreen()),
         );
       }
     } catch (e) {
@@ -382,10 +507,10 @@ class _LoginScreenState extends State<LoginScreen>
                         // Tab content
                         Container(
                           constraints: BoxConstraints(
-                            minHeight: 400,
-                            maxHeight: MediaQuery.of(context).size.height * 0.7,
+                            minHeight: 380,
+                            maxHeight: MediaQuery.of(context).size.height * 0.65,
                           ),
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.all(20),
                           child: TabBarView(
                             controller: _tabController,
                             children: [
@@ -480,7 +605,27 @@ class _LoginScreenState extends State<LoginScreen>
               return null;
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+
+          // ✅ Beni Hatırla Checkbox
+          Row(
+            children: [
+              Checkbox(
+                value: _rememberMe,
+                onChanged: (value) {
+                  setState(() {
+                    _rememberMe = value ?? false;
+                  });
+                },
+                activeColor: const Color(0xFF2A5298),
+              ),
+              const Text(
+                'Beni Hatırla',
+                style: TextStyle(fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
           // Login button
           ElevatedButton(

@@ -1,5 +1,6 @@
 class Product {
   final String? id;
+  final String storeId; // ✅ Store isolation için eklendi
   final String barcode;
   final String name;
   final String? description;
@@ -14,6 +15,7 @@ class Product {
 
   Product({
     this.id,
+    required this.storeId, // ✅ Zorunlu alan
     required this.barcode,
     required this.name,
     this.description,
@@ -25,9 +27,8 @@ class Product {
     this.category,
     DateTime? createdAt,
     DateTime? updatedAt,
-  }) : 
-    createdAt = createdAt ?? DateTime.now(),
-    updatedAt = updatedAt ?? DateTime.now();
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
   // minStockLevel getter ekleme
   int get minStockLevel => minStock;
@@ -35,6 +36,7 @@ class Product {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'store_id': storeId, // ✅ Store ID eklendi
       'barcode': barcode,
       'name': name,
       'description': description,
@@ -52,6 +54,7 @@ class Product {
   factory Product.fromMap(Map<String, dynamic> map) {
     return Product(
       id: map['id']?.toString(),
+      storeId: map['store_id'] ?? '', // ✅ Store ID eklendi
       barcode: map['barcode'] ?? '',
       name: map['name'] ?? '',
       description: map['description'],
@@ -68,6 +71,7 @@ class Product {
 
   Product copyWith({
     String? id,
+    String? storeId,
     String? barcode,
     String? name,
     String? description,
@@ -82,6 +86,7 @@ class Product {
   }) {
     return Product(
       id: id ?? this.id,
+      storeId: storeId ?? this.storeId, // ✅ Store ID eklendi
       barcode: barcode ?? this.barcode,
       name: name ?? this.name,
       description: description ?? this.description,
@@ -98,7 +103,3 @@ class Product {
 
   bool get isLowStock => stock <= minStock;
 }
-
-
-
-

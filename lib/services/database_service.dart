@@ -26,7 +26,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 8,
+      version: 9, // ✅ Versiyonu artırdık - store_id sütunları için
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -46,6 +46,7 @@ class DatabaseService {
         min_stock INTEGER,
         tax_rate REAL,
         category TEXT,
+        store_id TEXT NOT NULL DEFAULT "default_store",
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -60,6 +61,7 @@ class DatabaseService {
         discount REAL DEFAULT 0,
         final_amount REAL NOT NULL,
         payment_method TEXT NOT NULL,
+        store_id TEXT NOT NULL DEFAULT "default_store",
         created_at TEXT NOT NULL,
         is_printed INTEGER DEFAULT 0
       )
@@ -93,6 +95,7 @@ class DatabaseService {
         monthly_purchases REAL DEFAULT 0,
         yearly_purchases REAL DEFAULT 0,
         notes TEXT,
+        store_id TEXT NOT NULL DEFAULT "default_store",
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -127,6 +130,13 @@ class DatabaseService {
         FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
       )
     ''');
+
+    // ✅ Create indexes for better performance
+    await db
+        .execute('CREATE INDEX idx_products_store_id ON products(store_id)');
+    await db.execute('CREATE INDEX idx_sales_store_id ON sales(store_id)');
+    await db
+        .execute('CREATE INDEX idx_suppliers_store_id ON suppliers(store_id)');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -201,6 +211,24 @@ class DatabaseService {
       await db.delete('sales');
       await db.delete('suppliers');
       await db.delete('products');
+      // // Debug print removed // Removed for production
+    }
+    if (oldVersion < 9) {
+      // ✅ Add store_id columns for multi-tenant support
+      await db.execute(
+          'ALTER TABLE products ADD COLUMN store_id TEXT NOT NULL DEFAULT "default_store"');
+      await db.execute(
+          'ALTER TABLE sales ADD COLUMN store_id TEXT NOT NULL DEFAULT "default_store"');
+      await db.execute(
+          'ALTER TABLE suppliers ADD COLUMN store_id TEXT NOT NULL DEFAULT "default_store"');
+
+      // Create indexes for better performance
+      await db
+          .execute('CREATE INDEX idx_products_store_id ON products(store_id)');
+      await db.execute('CREATE INDEX idx_sales_store_id ON sales(store_id)');
+      await db.execute(
+          'CREATE INDEX idx_suppliers_store_id ON suppliers(store_id)');
+
       // // Debug print removed // Removed for production
     }
   }
@@ -300,7 +328,3 @@ class DatabaseService {
     // // Debug print removed // Removed for production
   }
 }
-
-
-
-

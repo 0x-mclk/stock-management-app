@@ -1,5 +1,6 @@
 class Supplier {
   final String? id;
+  final String storeId; // ✅ Store isolation için eklendi
   final String name;
   final String? phone;
   final String? email;
@@ -14,6 +15,7 @@ class Supplier {
 
   Supplier({
     this.id,
+    required this.storeId, // ✅ Zorunlu alan
     required this.name,
     this.phone,
     this.email,
@@ -31,6 +33,7 @@ class Supplier {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'store_id': storeId, // ✅ Store ID eklendi
       'name': name,
       'phone': phone,
       'email': email,
@@ -48,6 +51,7 @@ class Supplier {
   factory Supplier.fromMap(Map<String, dynamic> map) {
     return Supplier(
       id: map['id']?.toString(),
+      storeId: map['store_id'] ?? '', // ✅ Store ID eklendi
       name: map['name'] ?? '',
       phone: map['phone'],
       email: map['email'],
@@ -64,6 +68,7 @@ class Supplier {
 
   Supplier copyWith({
     String? id,
+    String? storeId,
     String? name,
     String? phone,
     String? email,
@@ -78,6 +83,7 @@ class Supplier {
   }) {
     return Supplier(
       id: id ?? this.id,
+      storeId: storeId ?? this.storeId, // ✅ Store ID eklendi
       name: name ?? this.name,
       phone: phone ?? this.phone,
       email: email ?? this.email,
@@ -92,7 +98,3 @@ class Supplier {
     );
   }
 }
-
-
-
-

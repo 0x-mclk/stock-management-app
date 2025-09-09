@@ -126,6 +126,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                 category: 'Diğer',
                 createdAt: DateTime.now(),
                 updatedAt: DateTime.now(),
+                storeId: 'unknown', // ✅ Default store ID for missing products
               ),
             );
 
@@ -271,6 +272,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                 category: 'Diğer',
                 createdAt: DateTime.now(),
                 updatedAt: DateTime.now(),
+                storeId: 'unknown', // ✅ Default store ID for missing products
               ),
             );
 

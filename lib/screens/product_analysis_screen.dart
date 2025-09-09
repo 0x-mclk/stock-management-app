@@ -64,6 +64,7 @@ class _ProductAnalysisScreenState extends State<ProductAnalysisScreen>
         name: 'Ürün bulunamadı',
         salePrice: 0,
         stock: 0,
+        storeId: 'unknown', // ✅ Default store ID for missing products
       ),
     );
 

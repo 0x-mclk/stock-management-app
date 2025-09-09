@@ -261,6 +261,7 @@ class _AddProductWithCameraScreenState
           description: null,
           category: null,
           minStock: int.tryParse(_minStockController.text) ?? 5,
+          storeId: existingProduct.storeId, // ✅ Mevcut store ID'yi koru
         );
 
         await productProvider.updateProduct(updatedProduct);
@@ -287,6 +288,7 @@ class _AddProductWithCameraScreenState
           description: null,
           category: null,
           minStock: int.tryParse(_minStockController.text) ?? 5,
+          storeId: '', // ✅ Provider otomatik atayacak
         );
 
         await productProvider.addProduct(product);
@@ -585,7 +587,3 @@ class _AddProductWithCameraScreenState
     );
   }
 }
-
-
-
-

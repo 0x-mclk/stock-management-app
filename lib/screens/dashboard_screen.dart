@@ -96,51 +96,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await _loadData();
-        },
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Summary Cards
-              const Text(
-                'Genel Durum',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await _loadData();
+          },
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Summary Cards
+                const Text(
+                  'Genel Durum',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              _buildSummaryCards(context),
+                const SizedBox(height: 16),
+                _buildSummaryCards(context),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // Quick Actions
-              const Text(
-                'Hızlı İşlemler',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                // Quick Actions
+                const Text(
+                  'Hızlı İşlemler',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.science),
-                tooltip: 'Test',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const FirestoreTestPage()),
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildQuickActions(context),
+                const SizedBox(height: 16),
+                _buildQuickActions(context),
 
-              const SizedBox(height: 24),
-            ],
+                const SizedBox(height: 80), // Bottom navigation için ek alan
+              ],
+            ),
           ),
         ),
       ),
@@ -170,36 +162,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 double dailyProfit =
                     salesProvider.getDailyProfit(productProvider);
 
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: [
-                    _buildSummaryCard(
-                      'Toplam Ürün',
-                      '${productProvider.products.length}',
-                      Icons.inventory,
-                      Colors.blue,
-                    ),
-                    _buildSummaryCard(
-                      'Günlük Satış',
-                      CurrencyFormatter.formatWithSymbol(dailySales),
-                      Icons.trending_up,
-                      Colors.green,
-                    ),
-                    _buildSummaryCard(
-                      'Günlük Kâr',
-                      CurrencyFormatter.formatWithSymbol(dailyProfit),
-                      Icons.monetization_on,
-                      Colors.orange,
-                    ),
-                    _buildSummaryCard(
-                      'Stok Değeri',
-                      CurrencyFormatter.formatWithSymbol(
-                          _calculateStockValue(productProvider.products)),
-                      Icons.account_balance_wallet,
-                      Colors.purple,
-                    ),
-                  ],
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    return GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 1.2,
+                      children: [
+                        _buildSummaryCard(
+                          'Toplam Ürün',
+                          '${productProvider.products.length}',
+                          Icons.inventory,
+                          Colors.blue,
+                        ),
+                        _buildSummaryCard(
+                          'Günlük Satış',
+                          CurrencyFormatter.formatWithSymbol(dailySales),
+                          Icons.trending_up,
+                          Colors.green,
+                        ),
+                        _buildSummaryCard(
+                          'Günlük Kâr',
+                          CurrencyFormatter.formatWithSymbol(dailyProfit),
+                          Icons.monetization_on,
+                          Colors.orange,
+                        ),
+                        _buildSummaryCard(
+                          'Stok Değeri',
+                          CurrencyFormatter.formatWithSymbol(
+                              _calculateStockValue(productProvider.products)),
+                          Icons.account_balance_wallet,
+                          Colors.purple,
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             );

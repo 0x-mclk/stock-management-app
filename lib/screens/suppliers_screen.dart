@@ -339,7 +339,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(4),
                                     decoration: BoxDecoration(
-                                      color: Colors.orange.withValues(alpha: 0.1),
+                                      color:
+                                          Colors.orange.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Icon(
@@ -551,6 +552,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                 totalPurchases: isEditing ? supplier.totalPurchases : 0.0,
                 monthlyPurchases: isEditing ? supplier.monthlyPurchases : 0.0,
                 yearlyPurchases: isEditing ? supplier.yearlyPurchases : 0.0,
+                storeId: '', // ✅ Provider otomatik atayacak
               );
 
               if (isEditing) {
@@ -643,6 +645,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       paymentMethod: PaymentMethod.cash, // Varsayılan ödeme yöntemi
       items: [saleItem],
       createdAt: date,
+      storeId: '', // ✅ Provider otomatik atayacak
     );
 
     // SalesProvider'a ekle
@@ -845,7 +848,3 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     );
   }
 }
-
-
-
-

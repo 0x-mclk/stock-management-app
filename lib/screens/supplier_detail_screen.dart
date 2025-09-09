@@ -1497,6 +1497,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
         ),
       ],
       createdAt: purchaseDate,
+      storeId: '', // ✅ Provider otomatik atayacak
     );
     // Satışı ekle (SalesProvider üzerinden eklenmeli)
     context.read<SalesProvider>().addSale(newSale);
@@ -1751,6 +1752,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
         ),
       ],
       createdAt: purchaseDate,
+      storeId: purchase.storeId, // ✅ Mevcut store ID'yi koru
     );
 
     // Satışı güncelle
@@ -2291,7 +2293,3 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
     );
   }
 }
-
-
-
-

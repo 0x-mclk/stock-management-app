@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
 import '../services/data_service.dart';
@@ -34,6 +35,12 @@ class SalesProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isInitialized => _isInitialized;
 
+  // ✅ Store ID getter - Firebase Auth kullanarak
+  String get currentStoreId {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    return currentUser != null ? 'store_${currentUser.uid}' : '';
+  }
+
   double get cartTotal {
     return _cartItems.fold(0.0, (total, item) => total + item.totalPrice);
   }
@@ -44,7 +51,14 @@ class SalesProvider extends ChangeNotifier {
   Future<void> loadSales() async {
     setLoading(true);
     try {
-      _sales = await _dataService.loadSales(limit: null); // Tüm satışları yükle
+      // ✅ Store ID ile filtrelenmiş satışları yükle
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+
+      _sales = await _dataService.loadSalesByStore(storeId,
+          limit: null); // Tüm satışları yükle
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -121,15 +135,23 @@ class SalesProvider extends ChangeNotifier {
 
   Future<void> addSale(Sale sale) async {
     try {
+      // ✅ Store ID'sini otomatik ata
+      final storeId = currentStoreId;
+      if (storeId.isEmpty) {
+        throw Exception('Kullanıcı giriş yapmamış');
+      }
+
+      final saleWithStore = sale.copyWith(storeId: storeId);
+
       // // Debug print removed // Removed for production
       // // Debug print removed // Removed for production
-      if (sale.items.isNotEmpty) {
-        for (int i = 0; i < sale.items.length; i++) {
+      if (saleWithStore.items.isNotEmpty) {
+        for (int i = 0; i < saleWithStore.items.length; i++) {
           // // Debug print removed // Removed for production
         }
       }
 
-      await _dataService.saveSale(sale);
+      await _dataService.saveSale(saleWithStore);
       await refreshSales(); // Force refresh to get updated data
     } catch (e) {
       // // Debug print removed // Removed for production
@@ -222,6 +244,7 @@ class SalesProvider extends ChangeNotifier {
             purchasePrice: 0.0, // Eğer ürün bulunamadıysa kâr hesaplayamayız
             salePrice: item.unitPrice,
             stock: 0,
+            storeId: currentStoreId, // ✅ Placeholder ürün için store ID
           ),
         );
 

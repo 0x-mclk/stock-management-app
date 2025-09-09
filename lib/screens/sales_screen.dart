@@ -640,6 +640,7 @@ class _SalesScreenState extends State<SalesScreen> {
       paymentMethod: selectedPaymentMethod,
       discount: discount,
       createdAt: DateTime.now(),
+      storeId: '', // ✅ Provider otomatik atayacak
     );
 
     // // Debug print removed // Removed for production

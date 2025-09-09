@@ -40,8 +40,11 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
         return;
       }
 
+      // ✅ Dinamik store ID - Her kullanıcının kendi mağazası
+      final storeId = 'store_${currentUser.uid}';
+
       final invitationId = await InvitationService.instance.sendInvitation(
-        storeId: 'default_store', // Bu kısım gerçek store ID ile değiştirilmeli
+        storeId: storeId, // ✅ Dinamik store ID kullan
         email: _emailController.text.trim(),
         role: _selectedRole,
         invitedBy: currentUser.uid,

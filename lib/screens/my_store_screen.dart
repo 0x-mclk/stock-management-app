@@ -17,7 +17,7 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
   String _storeId = '';
   DateTime? _createdAt;
   DateTime? _lastLogin;
-  
+
   bool _isLoading = true;
 
   @override
@@ -34,13 +34,13 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
         _storeId = 'store_${currentUser.uid}';
         _userEmail = currentUser.email ?? '';
         _lastLogin = currentUser.metadata.lastSignInTime;
-        
+
         // Firestore'dan kullanıcı bilgilerini al
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(currentUser.uid)
             .get();
-            
+
         if (userDoc.exists) {
           final userData = userDoc.data()!;
           setState(() {
@@ -66,7 +66,7 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
         await FirebaseAuth.instance.sendPasswordResetEmail(
           email: currentUser!.email!,
         );
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -96,21 +96,21 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildStoreInfoCard(),
-                const SizedBox(height: 16),
-                _buildProfileCard(),
-                const SizedBox(height: 16),
-                _buildActionsCard(),
-              ],
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildStoreInfoCard(),
+                  const SizedBox(height: 16),
+                  _buildProfileCard(),
+                  const SizedBox(height: 16),
+                  _buildActionsCard(),
+                ],
+              ),
             ),
-          ),
     );
   }
 

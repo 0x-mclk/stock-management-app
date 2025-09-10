@@ -44,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen>
     final prefs = await SharedPreferences.getInstance();
     final rememberMe = prefs.getBool('remember_me') ?? false;
     final savedEmail = prefs.getString('saved_email');
-    
+
     if (rememberMe && savedEmail != null) {
       // Firebase Auth zaten giriş yapmış kullanıcıyı hatırlıyor mu kontrol et
       final currentUser = FirebaseAuth.instance.currentUser;
@@ -117,22 +117,24 @@ class _LoginScreenState extends State<LoginScreen>
   Future<Map<String, dynamic>?> _checkInvitation(String email) async {
     try {
       print('🔍 Checking invitations for: $email');
-      
+
       // ✅ Pending VE accepted invitations için kontrol (Firebase Console compatibility)
       final querySnapshot = await FirebaseFirestore.instance
           .collection('store_invitations')
           .where('email', isEqualTo: email)
-          .where('status', whereIn: ['pending', 'accepted']) // ✅ Both status kontrolü
+          .where('status',
+              whereIn: ['pending', 'accepted']) // ✅ Both status kontrolü
           .limit(1)
           .get();
 
       if (querySnapshot.docs.isNotEmpty) {
         final invitation = querySnapshot.docs.first.data();
         final status = invitation['status'];
-        print('✅ Invitation found for: $email - Status: $status - Store: ${invitation['storeId']}');
+        print(
+            '✅ Invitation found for: $email - Status: $status - Store: ${invitation['storeId']}');
         return invitation;
       }
-      
+
       print('🟡 No invitation found for: $email');
       return null;
     } catch (e) {
@@ -165,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen>
       } catch (authError) {
         if (authError.toString().contains('email-already-in-use')) {
           print('🟡 Email already exists, trying to sign in...');
-          
+
           // B. Hesap zaten varsa giriş yap
           try {
             userCredential = await FirebaseAuth.instance
@@ -174,7 +176,8 @@ class _LoginScreenState extends State<LoginScreen>
             print('✅ Signed in with existing account');
           } catch (signInError) {
             print('❌ Sign in failed: $signInError');
-            throw Exception('Bu email zaten kayıtlı ancak şifre yanlış. Lütfen doğru şifreyi girin.');
+            throw Exception(
+                'Bu email zaten kayıtlı ancak şifre yanlış. Lütfen doğru şifreyi girin.');
           }
         } else {
           print('❌ Firebase Auth error: $authError');
@@ -508,7 +511,8 @@ class _LoginScreenState extends State<LoginScreen>
                         Container(
                           constraints: BoxConstraints(
                             minHeight: 380,
-                            maxHeight: MediaQuery.of(context).size.height * 0.65,
+                            maxHeight:
+                                MediaQuery.of(context).size.height * 0.65,
                           ),
                           padding: const EdgeInsets.all(20),
                           child: TabBarView(

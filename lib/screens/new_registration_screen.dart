@@ -81,7 +81,8 @@ class _NewRegistrationScreenState extends State<NewRegistrationScreen> {
       final querySnapshot = await FirebaseFirestore.instance
           .collection('store_invitations')
           .where('email', isEqualTo: email)
-          .where('status', whereIn: ['pending', 'accepted']) // ✅ Both status kontrolü
+          .where('status',
+              whereIn: ['pending', 'accepted']) // ✅ Both status kontrolü
           .limit(1)
           .get();
 

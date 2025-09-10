@@ -38,12 +38,13 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
             .collection('users')
             .doc(currentUser.uid)
             .get();
-            
+
         if (userDoc.exists) {
           final userData = userDoc.data()!;
           setState(() {
             _userName = userData['name'] ?? 'Kullanıcı';
-            _storeName = userData['name'] ?? 'Mağaza'; // Ad = Mağaza adı (sadelik için)
+            _storeName =
+                userData['name'] ?? 'Mağaza'; // Ad = Mağaza adı (sadelik için)
           });
         }
       }
@@ -355,12 +356,12 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
   static Future<bool> _performCompleteLogout() async {
     try {
       print('🔄 Starting complete logout process...');
-      
+
       // 1. SharedPreferences temizleme
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear(); // Tüm verileri temizle
       print('✅ SharedPreferences cleared');
-      
+
       // 2. Firebase Auth çıkışı
       try {
         await FirebaseAuth.instance.signOut();
@@ -369,16 +370,17 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
         print('⚠️ Firebase signOut error: $firebaseError');
         // Firebase hatası olsa bile devam et
       }
-      
+
       // 3. AuthService logout çağrısı
       try {
-        final authResult = await AuthService.instance.logout(clearRemembered: true);
+        final authResult =
+            await AuthService.instance.logout(clearRemembered: true);
         print('✅ AuthService logout: ${authResult.success}');
       } catch (authError) {
         print('⚠️ AuthService logout error: $authError');
         // AuthService hatası olsa bile devam et
       }
-      
+
       print('✅ Complete logout finished successfully');
       return true;
     } catch (e) {

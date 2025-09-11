@@ -13,68 +13,66 @@ class ProductProvider extends ChangeNotifier {
   String _searchQuery = '';
   bool _isLoading = false;
   bool _isInitialized = false;
-  bool _firebaseListenerStarted = false; // 🚀 PREVENT DUPLICATE LISTENERS
+  String? _currentStoreId;
+
   final DataService _dataService = DataService();
   final FirebaseSyncService _syncService = FirebaseSyncService();
   final FirestoreService _firestoreService = FirestoreService.instance;
   NotificationProvider? _notificationProvider;
-  StreamSubscription? _firebaseSubscription;
 
-  // ✅ Constructor: Initialize basic state only (no async operations)
+  // 🔥 Firebase Real-Time Stream
+  StreamSubscription? _firebaseSubscription;
+  bool _firebaseListenerStarted = false;
+
+  // Constructor
   ProductProvider() {
     print('🏗️ ProductProvider constructor called');
   }
 
-  // ✅ Current store ID getter
-  String get currentStoreId {
-    return _currentStoreId ?? '';
-  }
-
-  String? _currentStoreId;
-
-  // Initialize store ID
-  Future<void> _initializeStoreId() async {
-    final storeId = await StoreSelectionService.instance.getCurrentStoreId();
-    _currentStoreId = storeId;
-
-    // 🚀 CRITICAL: Start polling immediately when store ID is set
-    if (storeId.isNotEmpty) {
-      _startRealTimePolling(storeId);
-      print('🔥 POLLING STARTED IMMEDIATELY for store: $storeId');
-    }
-
-    notifyListeners();
-  }
-
-  // NotificationProvider referansını set etmek için
-  void setNotificationProvider(NotificationProvider notificationProvider) {
-    _notificationProvider = notificationProvider;
-  }
-
+  // Getters
   List<Product> get products {
-    // Search varsa filtered products, yoksa tüm products
     if (_searchQuery.isNotEmpty) {
-      print('🔍 GETTER - Returning filtered: ${_filteredProducts.length}');
       return _filteredProducts;
     }
-    print('🔍 GETTER - Returning all: ${_products.length}');
     return _products;
   }
 
   bool get isLoading => _isLoading;
   String get searchQuery => _searchQuery;
+  String get currentStoreId => _currentStoreId ?? '';
   bool get isInitialized => _isInitialized;
 
-  // Initialize and load data from database with real-time Firebase updates
+  // Set notification provider
+  void setNotificationProvider(NotificationProvider notificationProvider) {
+    _notificationProvider = notificationProvider;
+  }
+
+  // Initialize store ID
+  Future<void> _initializeStoreId() async {
+    final storeId = await StoreSelectionService.instance.getCurrentStoreId();
+    _currentStoreId = storeId;
+    print('🆔 Store ID initialized: $_currentStoreId');
+  }
+
+  // Load products from local database
+  Future<void> _loadProductsFromDatabase() async {
+    final storeId = _currentStoreId ?? '';
+    if (storeId.isNotEmpty) {
+      _products = await _dataService.loadProductsByStore(storeId, limit: null);
+      _filterProducts();
+      notifyListeners();
+    }
+  }
+
+  // Main load products method
   Future<void> loadProducts() async {
-    print('🚀🚀🚀 LOAD PRODUCTS CALLED! Starting entire process...');
+    print('🚀 LOAD PRODUCTS CALLED! Starting entire process...');
     setLoading(true);
     try {
       // Initialize store ID first
       await _initializeStoreId();
       print('🆔 Store ID initialized: $_currentStoreId');
 
-      // ✅ Store ID ile filtrelenmiş ürünleri yükle
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         print('❌ EMPTY STORE ID - User not logged in');
@@ -83,7 +81,7 @@ class ProductProvider extends ChangeNotifier {
 
       print('✅ Store ID is valid: $storeId, starting product loading...');
 
-      // First load from local database - NO LIMIT to get all products
+      // First load from local database
       _products = await _dataService.loadProductsByStore(storeId, limit: null);
       _isInitialized = true;
       _filterProducts();
@@ -93,23 +91,17 @@ class ProductProvider extends ChangeNotifier {
       print('🔄 Starting Firebase sync for products...');
       await _syncService.syncFromFirebase();
 
-      // Reload after Firebase sync - NO LIMIT to get all products
+      // Reload after Firebase sync
       _products = await _dataService.loadProductsByStore(storeId, limit: null);
       _filterProducts();
 
       print('🔍 LOADED PRODUCTS COUNT: ${_products.length}');
-      print('🔍 FILTERED PRODUCTS COUNT: ${_filteredProducts.length}');
-      print('🔍 SEARCH QUERY: "$_searchQuery"');
 
-      // Stok kontrolü yap ve bildirimleri güncelle
+      // Start Firebase real-time updates
+      _startFirebaseRealTimeStream(storeId);
+
+      // Check low stock and update notifications
       _notificationProvider?.checkLowStockProducts(_products);
-
-      // � TEMPORARILY DISABLE POLLING until data is fixed
-      // print('🚀🚀🚀 ABOUT TO START POLLING!!! StoreId: $storeId');
-      // print('🚀🚀🚀 Current timer status: ${_pollingTimer?.isActive}');
-      // _startRealTimePolling(storeId);
-      // print('🚀🚀🚀 POLLING CALL COMPLETED!!! Timer status now: ${_pollingTimer?.isActive}');
-      print('🚨 POLLING DISABLED - FIXING DATA FIRST');
 
       notifyListeners();
       print('🔔 notifyListeners() called after Firebase sync');
@@ -120,81 +112,88 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
-  // 🚀 REAL-TIME POLLING - GUARANTEED TO WORK!
-  Timer? _pollingTimer;
-
-  void _startRealTimePolling(String storeId) {
-    print('� POLLING TEMPORARILY DISABLED - Data corruption risk!');
-    return; // Exit immediately - no polling until fixed
-
-    print('�🚀🚀🚀 _startRealTimePolling CALLED with storeId: $storeId');
-
-    // Cancel existing timer
-    if (_pollingTimer != null) {
-      print('🚀 Cancelling existing timer...');
-      _pollingTimer?.cancel();
+  // 🔥 Firebase Real-Time Stream
+  void _startFirebaseRealTimeStream(String storeId) {
+    if (_firebaseListenerStarted) {
+      print('🔥 Firebase listener already started, skipping...');
+      return;
     }
 
-    print(
-        '🕒🕒🕒 Starting REAL-TIME POLLING every 3 seconds for store: $storeId');
+    print('🔥 Starting Firebase Real-Time Stream for store: $storeId');
 
-    _pollingTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
-      try {
-        print('🔄🔄🔄 POLLING: Checking Firebase for updates...');
+    // Cancel previous subscription
+    _firebaseSubscription?.cancel();
 
-        // Get latest products from Firebase
-        final firebaseProductMaps =
-            await _firestoreService.getStoreProducts(storeId);
-        final firebaseProducts =
-            firebaseProductMaps.map((map) => Product.fromMap(map)).toList();
+    // Start Firebase stream
+    _firebaseSubscription =
+        _firestoreService.getStoreProductsStream(storeId).listen(
+      (snapshot) {
+        print('🔥 Real-time update received: ${snapshot.docs.length} products');
+        _handleFirebaseStreamUpdate(snapshot);
+      },
+      onError: (error) {
+        print('❌ Firebase stream error: $error');
+      },
+    );
 
-        if (firebaseProducts.length != _products.length) {
-          print(
-              '🔥🔥🔥 DETECTED CHANGE: Product count different! Firebase: ${firebaseProducts.length}, Local: ${_products.length}');
+    _firebaseListenerStarted = true;
+    print('🔥 Firebase listener started successfully');
+  }
 
-          // Update products immediately
-          _products = firebaseProducts;
-          _filterProducts();
+  // Handle Firebase stream updates
+  void _handleFirebaseStreamUpdate(dynamic snapshot) async {
+    try {
+      print('🔄 Processing Firebase stream update...');
 
-          // Update notifications
-          _notificationProvider?.checkLowStockProducts(_products);
+      // Convert Firebase data to Product models
+      final firebaseProducts = snapshot.docs.map<Product>((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return Product.fromMap({...data, 'id': doc.id});
+      }).toList();
 
-          // Force UI update
-          notifyListeners();
+      // 🗑️ CRITICAL: Handle deletions - remove products that exist locally but not in Firebase
+      final storeId = _currentStoreId ?? '';
+      if (storeId.isNotEmpty) {
+        // Get current local products
+        final localProducts =
+            await _dataService.loadProductsByStore(storeId, limit: null);
 
-          print('⚡⚡⚡ INSTANT UPDATE COMPLETED via POLLING!');
-        } else {
-          print(
-              '✅ No count changes detected. Firebase: ${firebaseProducts.length}, Local: ${_products.length}');
-          // Check for name changes
-          bool hasChanges = false;
-          for (int i = 0;
-              i < firebaseProducts.length && i < _products.length;
-              i++) {
-            if (firebaseProducts[i].name != _products[i].name) {
-              hasChanges = true;
-              break;
-            }
-          }
+        // Find products that exist locally but not in Firebase (these were deleted)
+        final firebaseProductIds = firebaseProducts.map((p) => p.id).toSet();
+        final productsToDelete = localProducts
+            .where(
+                (localProduct) => !firebaseProductIds.contains(localProduct.id))
+            .toList();
 
-          if (hasChanges) {
-            print('🔥🔥🔥 DETECTED NAME CHANGES in products!');
-            _products = firebaseProducts;
-            _filterProducts();
-            _notificationProvider?.checkLowStockProducts(_products);
-            notifyListeners();
-            print('⚡⚡⚡ INSTANT UPDATE COMPLETED via POLLING!');
-          } else {
-            print('✅ No changes detected in this polling cycle');
+        // Delete products that don't exist in Firebase anymore
+        for (final productToDelete in productsToDelete) {
+          final productId = productToDelete.id;
+          if (productId != null && productId.isNotEmpty) {
+            print(
+                '🗑️ DELETING product locally (removed from Firebase): ${productToDelete.name} (ID: $productId)');
+            await _dataService.deleteProduct(productId);
           }
         }
-      } catch (e) {
-        print('❌❌❌ Polling error: $e');
-      }
-    });
 
-    print(
-        '🚀🚀🚀 Timer created successfully! Timer active: ${_pollingTimer?.isActive}');
+        if (productsToDelete.isNotEmpty) {
+          print(
+              '🗑️ Deleted ${productsToDelete.length} products that were removed from Firebase');
+        }
+      }
+
+      // 💾 Update/Save products that exist in Firebase
+      for (final product in firebaseProducts) {
+        await _dataService.saveProduct(product);
+      }
+
+      // 🔄 Reload products from database to reflect all changes
+      await _loadProductsFromDatabase();
+
+      print(
+          '✅ Real-time update completed: ${firebaseProducts.length} products');
+    } catch (e) {
+      print('❌ Error processing Firebase stream update: $e');
+    }
   }
 
   // Force reload products
@@ -212,25 +211,16 @@ class ProductProvider extends ChangeNotifier {
 
   Future<void> addProduct(Product product) async {
     try {
-      // ✅ Store ID'sini otomatik ata
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      print('🔍 ADD CHECK - Current Store: $storeId');
-      print('🔍 ADD CHECK - Original Product Store: ${product.storeId}');
-
       final productWithStore = product.copyWith(storeId: storeId);
-      print('🔍 ADD CHECK - Final Product Store: ${productWithStore.storeId}');
-
       await _dataService.saveProduct(productWithStore);
 
-      // Immediately sync to Firebase
-      print('🔄 Syncing new product to Firebase...');
-      await _syncService.syncToFirebase();
-
-      await refreshProducts(); // Force refresh to get updated data
+      // Real-time stream will handle the update
+      await refreshProducts();
     } catch (e) {
       print('❌ Error adding product: $e');
       rethrow;
@@ -239,16 +229,10 @@ class ProductProvider extends ChangeNotifier {
 
   Future<void> updateProduct(Product product) async {
     try {
-      // ✅ Store ID kontrolü - güvenlik için
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
-
-      // Debug store ID comparison
-      print('🔍 UPDATE CHECK - Current Store: $storeId');
-      print('🔍 UPDATE CHECK - Product Store: ${product.storeId}');
-      print('🔍 UPDATE CHECK - Match: ${product.storeId == storeId}');
 
       if (product.storeId != storeId && product.storeId.isNotEmpty) {
         throw Exception('Bu ürünü düzenleme yetkiniz yok');
@@ -259,39 +243,41 @@ class ProductProvider extends ChangeNotifier {
       if (index != -1) {
         _products[index] = product;
         _filterProducts();
-
-        // Stok kontrolü yap ve bildirimleri güncelle
         _notificationProvider?.checkLowStockProducts(_products);
-
         notifyListeners();
       }
     } catch (e) {
-      // // Debug print removed // Removed for production
       rethrow;
     }
   }
 
   Future<void> removeProduct(String productId) async {
     try {
-      // ✅ Store ID kontrolü - güvenlik için
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      // Ürünün bu store'a ait olduğunu kontrol et
       final product = _products.firstWhere((p) => p.id == productId,
           orElse: () => throw Exception('Ürün bulunamadı'));
       if (product.storeId != storeId) {
         throw Exception('Bu ürünü silme yetkiniz yok');
       }
 
+      // 🗑️ Delete from local database
       await _dataService.deleteProduct(productId);
+
+      // 🔥 CRITICAL: Delete from Firebase as well
+      print(
+          '🗑️ Deleting product from Firebase: ${product.name} (ID: $productId)');
+      await _firestoreService.deleteProduct(storeId, productId);
+      print('✅ Product deleted from Firebase successfully');
+
+      // Update local UI
       _products.removeWhere((p) => p.id == productId);
       _filterProducts();
       notifyListeners();
     } catch (e) {
-      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -358,10 +344,9 @@ class ProductProvider extends ChangeNotifier {
   // Migration methods for Firestore
   Future<Map<String, dynamic>> getMigrationStatus() async {
     try {
-      // Return migration status information
       return {
         'sqliteCount': _products.length,
-        'firestoreCount': 0, // This would come from Firestore count
+        'firestoreCount': 0,
         'needsMigration': _products.isNotEmpty,
         'hasStore': true,
         'storeId': 'default_store',
@@ -380,26 +365,21 @@ class ProductProvider extends ChangeNotifier {
   Future<bool> migrateProductsToFirestore() async {
     try {
       setLoading(true);
-      // Add migration logic here if needed
-      // For now, just refresh products and return success
       await refreshProducts();
       return true;
     } catch (e) {
-      // // Debug print removed // Removed for production
       return false;
     } finally {
       setLoading(false);
     }
   }
 
-  // 🧹 Clean up resources when provider is disposed
+  // Clean up resources when provider is disposed
   @override
   void dispose() {
-    _pollingTimer?.cancel();
     _firebaseSubscription?.cancel();
     _firebaseListenerStarted = false;
-    print(
-        '🧹 ProductProvider disposed - Polling timer and Firebase listener cancelled');
+    print('🧹 ProductProvider disposed - Firebase listener cancelled');
     super.dispose();
   }
 }

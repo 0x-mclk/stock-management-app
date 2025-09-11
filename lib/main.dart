@@ -8,6 +8,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'providers/app_provider.dart';
 import 'providers/product_provider.dart';
+import 'providers/realtime_product_provider.dart';
 import 'providers/sales_provider.dart';
 import 'providers/supplier_provider.dart';
 import 'providers/notification_provider.dart';
@@ -83,6 +84,7 @@ class StockManagementApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AppProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => RealtimeProductProvider()),
         ChangeNotifierProxyProvider<NotificationProvider, ProductProvider>(
           create: (_) => ProductProvider(),
           update: (_, notificationProvider, productProvider) {

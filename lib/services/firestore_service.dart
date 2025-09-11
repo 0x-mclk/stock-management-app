@@ -965,7 +965,6 @@ class FirestoreService {
         .collection(_collectionStores)
         .doc(storeId)
         .collection('products')
-        .where('isActive', isEqualTo: true)
         .orderBy('name')
         .snapshots();
   }

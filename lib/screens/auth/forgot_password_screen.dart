@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/auth_service.dart';
-import 'login_screen.dart';
+import '../login_screen.dart'; // ✅ Doğru login screen path'i
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -354,7 +354,3 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     await _handleSendResetEmail();
   }
 }
-
-
-
-

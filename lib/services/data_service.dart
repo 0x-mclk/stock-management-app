@@ -18,7 +18,7 @@ class DataService {
       final maps = await _databaseService.query(
         'products',
         orderBy: 'created_at DESC',
-        limit: limit ?? 50, // Default limit 50 items to save memory
+        limit: limit, // No default limit - use exactly what's passed
       );
       return maps.map((map) => Product.fromMap(map)).toList();
     } catch (e) {
@@ -36,7 +36,7 @@ class DataService {
         where: 'store_id = ?',
         whereArgs: [storeId],
         orderBy: 'created_at DESC',
-        limit: limit ?? 50, // Default limit 50 items to save memory
+        limit: limit, // No default limit - use exactly what's passed
       );
       return maps.map((map) => Product.fromMap(map)).toList();
     } catch (e) {
@@ -47,21 +47,29 @@ class DataService {
 
   Future<void> saveProduct(Product product) async {
     try {
-      if (product.id?.isEmpty ?? true) {
+      print(
+          '💾 SAVE PRODUCT - ID: ${product.id}, Name: ${product.name}, StoreID: ${product.storeId}');
+
+      if (product.id == null) {
+        // New product - insert
         final productMap = product.toMap();
-        productMap.remove(
-            'id'); // Yeni ürünlerde ID çıkarılır, veritabanı otomatik oluşturur
-        await _databaseService.insert('products', productMap);
+        productMap.remove('id'); // Remove ID for auto-generation
+        print('➕ INSERTING new product: ${product.name}');
+        final newId = await _databaseService.insert('products', productMap);
+        print('✅ NEW PRODUCT inserted with ID: $newId');
       } else {
-        await _databaseService.update(
+        // Existing product - update
+        print('🔄 UPDATING existing product ID: ${product.id}');
+        final result = await _databaseService.update(
           'products',
           product.toMap(),
           where: 'id = ?',
           whereArgs: [product.id],
         );
+        print('✅ UPDATED $result rows for product: ${product.name}');
       }
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ ERROR saving product: $e');
       rethrow;
     }
   }

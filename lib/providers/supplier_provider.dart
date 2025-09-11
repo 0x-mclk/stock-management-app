@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/supplier.dart';
 import '../services/data_service.dart';
+import '../services/store_selection_service.dart';
 
 class SupplierProvider extends ChangeNotifier {
   List<Supplier> _suppliers = [];
@@ -11,18 +11,29 @@ class SupplierProvider extends ChangeNotifier {
   List<Supplier> get suppliers => _suppliers;
   bool get isLoading => _isLoading;
 
-  // ✅ Store ID getter - Firebase Auth kullanarak
+  // ✅ Store ID getter - Store Selection Service kullanarak
   String get currentStoreId {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    return currentUser != null ? 'store_${currentUser.uid}' : '';
+    return _currentStoreId ?? '';
+  }
+
+  String? _currentStoreId;
+
+  // Initialize store ID
+  Future<void> _initializeStoreId() async {
+    final storeId = await StoreSelectionService.instance.getCurrentStoreId();
+    _currentStoreId = storeId;
+    notifyListeners();
   }
 
   // Initialize and load data from database
   Future<void> loadSuppliers() async {
     setLoading(true);
     try {
+      // Initialize store ID first
+      await _initializeStoreId();
+
       // ✅ Store ID ile filtrelenmiş tedarikçileri yükle
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
@@ -46,7 +57,7 @@ class SupplierProvider extends ChangeNotifier {
   Future<void> addSupplier(Supplier supplier) async {
     try {
       // ✅ Store ID'sini otomatik ata
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
@@ -64,7 +75,7 @@ class SupplierProvider extends ChangeNotifier {
   Future<void> updateSupplier(Supplier supplier) async {
     try {
       // ✅ Store ID kontrolü - güvenlik için
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
@@ -87,7 +98,7 @@ class SupplierProvider extends ChangeNotifier {
   Future<void> removeSupplier(String supplierId) async {
     try {
       // ✅ Store ID kontrolü - güvenlik için
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }

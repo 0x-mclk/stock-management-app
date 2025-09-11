@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/firebase_auth_service.dart';
 import '../services/firebase_sync_service.dart';
+import '../services/store_selection_service.dart';
 import '../models/user_mode.dart';
 
 class AppProvider extends ChangeNotifier {
@@ -45,6 +46,9 @@ class AppProvider extends ChangeNotifier {
       );
 
       if (result.success) {
+        // Initialize store selection after successful login
+        await StoreSelectionService.instance.initializeAfterLogin();
+
         // Setup auto-sync after successful login
         _syncService.setupAutoSync();
 
@@ -82,6 +86,9 @@ class AppProvider extends ChangeNotifier {
       );
 
       if (result.success) {
+        // Initialize store selection after successful registration
+        await StoreSelectionService.instance.initializeAfterLogin();
+
         // Setup auto-sync after successful registration
         _syncService.setupAutoSync();
         notifyListeners();
@@ -100,6 +107,8 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> signOut() async {
     try {
+      // Clear store selection cache before signing out
+      await StoreSelectionService.instance.clearCache();
       await _authService.signOut();
       _lastSyncTime = null;
       _syncError = null;

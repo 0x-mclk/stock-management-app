@@ -6,7 +6,7 @@ import '../providers/product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/supplier_provider.dart';
 import 'main_screen.dart';
-import 'new_registration_screen.dart';
+import 'login_screen.dart'; // ✅ Ana login sayfasını kullan
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -70,21 +70,21 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
           );
         } else {
-          // Kullanıcı giriş yapmamış, kayıt ekranına git
+          // Kullanıcı giriş yapmamış, ana login sayfasına git
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (context) => const NewRegistrationScreen(),
+              builder: (context) => const LoginScreen(),
             ),
           );
         }
       }
     } catch (e) {
       // Debug print removed
-      // Even if there's an error, navigate to registration screen
+      // Even if there's an error, navigate to login screen
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => const NewRegistrationScreen(),
+            builder: (context) => const LoginScreen(),
           ),
         );
       }

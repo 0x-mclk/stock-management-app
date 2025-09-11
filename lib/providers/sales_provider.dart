@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
 import '../services/data_service.dart';
+import '../services/store_selection_service.dart';
+import '../services/firebase_sync_service.dart';
 import 'product_provider.dart';
 
 class CartItem {
@@ -35,10 +36,19 @@ class SalesProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isInitialized => _isInitialized;
 
-  // ✅ Store ID getter - Firebase Auth kullanarak
+  // ✅ Store ID getter - Store Selection Service kullanarak
   String get currentStoreId {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    return currentUser != null ? 'store_${currentUser.uid}' : '';
+    // Async operation - use FutureBuilder or initialize in advance
+    return _currentStoreId ?? '';
+  }
+
+  String? _currentStoreId;
+
+  // Initialize store ID
+  Future<void> _initializeStoreId() async {
+    final storeId = await StoreSelectionService.instance.getCurrentStoreId();
+    _currentStoreId = storeId;
+    notifyListeners();
   }
 
   double get cartTotal {
@@ -51,8 +61,11 @@ class SalesProvider extends ChangeNotifier {
   Future<void> loadSales() async {
     setLoading(true);
     try {
+      // Initialize store ID first
+      await _initializeStoreId();
+
       // ✅ Store ID ile filtrelenmiş satışları yükle
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
@@ -136,7 +149,7 @@ class SalesProvider extends ChangeNotifier {
   Future<void> addSale(Sale sale) async {
     try {
       // ✅ Store ID'sini otomatik ata
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
@@ -153,6 +166,16 @@ class SalesProvider extends ChangeNotifier {
 
       await _dataService.saveSale(saleWithStore);
       await refreshSales(); // Force refresh to get updated data
+
+      // 🔄 Satış kaydedildikten sonra hemen sync yap
+      print('🔄 Sale saved, triggering immediate sync...');
+      try {
+        await FirebaseSyncService().performFullSync();
+        print('✅ Immediate sync completed after sale');
+      } catch (syncError) {
+        print('⚠️ Immediate sync failed: $syncError');
+        // Sync hata verirse de devam et, auto-sync sonra halleder
+      }
     } catch (e) {
       // // Debug print removed // Removed for production
       rethrow;

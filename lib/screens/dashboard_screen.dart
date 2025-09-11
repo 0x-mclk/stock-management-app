@@ -11,7 +11,7 @@ import '../widgets/store_menu_widget.dart';
 import 'price_check_screen.dart';
 import 'notifications_screen.dart';
 import 'qr_product_analysis_screen.dart';
-import 'firebase_auth_screen.dart';
+import 'login_screen.dart';
 import 'team_management_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -383,10 +383,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final appProvider = Provider.of<AppProvider>(context, listen: false);
 
     if (!appProvider.isLoggedIn) {
-      // Show Firebase auth screen
+      // Show Login screen
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => const FirebaseAuthScreen(),
+          builder: (context) => const LoginScreen(),
         ),
       );
       return;

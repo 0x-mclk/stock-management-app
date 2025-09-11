@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // ✅ Beni hatırla için
+import '../services/store_selection_service.dart'; // ✅ Store selection düzeltmesi için
 import 'dashboard_screen.dart';
 import 'store_setup_screen.dart';
 import 'main_screen.dart';
@@ -193,6 +194,9 @@ class _LoginScreenState extends State<LoginScreen>
       userId = user.uid;
       print('✅ User authenticated with UID: $userId');
 
+      // CRITICAL: Initialize store selection with proper cache clearing for invited users
+      await StoreSelectionService.instance.initializeAfterLogin();
+
       print('🔵 Saving/updating user data to Firestore...');
       // 2. User bilgilerini kaydet/güncelle
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
@@ -291,6 +295,9 @@ class _LoginScreenState extends State<LoginScreen>
       final userId = user.uid;
       final storeId = 'store_$userId'; // YENİ mağaza ID'si
 
+      // CRITICAL: Initialize store selection with proper cache clearing for new users
+      await StoreSelectionService.instance.initializeAfterLogin();
+
       print('🔵 Saving normal user data to Firestore...');
       // 2. User bilgilerini kaydet
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
@@ -298,7 +305,7 @@ class _LoginScreenState extends State<LoginScreen>
         'name': name,
         'phone': phone,
         'role': 'owner',
-        'storeId': storeId, // YENİ mağaza ID'si
+        // storeId field removed - owner users use their own store_${uid}
         'createdAt': FieldValue.serverTimestamp(),
         'isActive': true,
       });
@@ -375,6 +382,9 @@ class _LoginScreenState extends State<LoginScreen>
       }
 
       print('✅ Login successful for: ${user.email}');
+
+      // CRITICAL: Initialize store selection with proper cache clearing
+      await StoreSelectionService.instance.initializeAfterLogin();
 
       // ✅ Beni hatırla özelliği
       if (_rememberMe) {

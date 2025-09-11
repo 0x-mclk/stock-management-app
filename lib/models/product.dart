@@ -83,9 +83,12 @@ class Product {
     String? category,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? forceNullId, // ⚠️ NEW: Force ID to be null when needed
   }) {
     return Product(
-      id: id ?? this.id,
+      id: forceNullId == true
+          ? null
+          : (id ?? this.id), // ⚠️ NEW: Handle null ID properly
       storeId: storeId ?? this.storeId, // ✅ Store ID eklendi
       barcode: barcode ?? this.barcode,
       name: name ?? this.name,

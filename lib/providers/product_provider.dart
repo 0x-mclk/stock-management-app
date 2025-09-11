@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ✅ Firebase Auth eklendi
 import '../models/product.dart';
 import '../services/data_service.dart';
+import '../services/store_selection_service.dart';
+import '../services/firebase_sync_service.dart';
 import 'notification_provider.dart';
 
 class ProductProvider extends ChangeNotifier {
@@ -11,12 +12,21 @@ class ProductProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isInitialized = false;
   final DataService _dataService = DataService();
+  final FirebaseSyncService _syncService = FirebaseSyncService();
   NotificationProvider? _notificationProvider;
 
   // ✅ Current store ID getter
   String get currentStoreId {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    return currentUser != null ? 'store_${currentUser.uid}' : '';
+    return _currentStoreId ?? '';
+  }
+
+  String? _currentStoreId;
+
+  // Initialize store ID
+  Future<void> _initializeStoreId() async {
+    final storeId = await StoreSelectionService.instance.getCurrentStoreId();
+    _currentStoreId = storeId;
+    notifyListeners();
   }
 
   // NotificationProvider referansını set etmek için
@@ -24,10 +34,15 @@ class ProductProvider extends ChangeNotifier {
     _notificationProvider = notificationProvider;
   }
 
-  List<Product> get products =>
-      _filteredProducts.isEmpty && _searchQuery.isEmpty
-          ? _products
-          : _filteredProducts;
+  List<Product> get products {
+    // Search varsa filtered products, yoksa tüm products
+    if (_searchQuery.isNotEmpty) {
+      print('🔍 GETTER - Returning filtered: ${_filteredProducts.length}');
+      return _filteredProducts;
+    }
+    print('🔍 GETTER - Returning all: ${_products.length}');
+    return _products;
+  }
 
   bool get isLoading => _isLoading;
   String get searchQuery => _searchQuery;
@@ -37,22 +52,40 @@ class ProductProvider extends ChangeNotifier {
   Future<void> loadProducts() async {
     setLoading(true);
     try {
+      // Initialize store ID first
+      await _initializeStoreId();
+
       // ✅ Store ID ile filtrelenmiş ürünleri yükle
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      _products = await _dataService.loadProductsByStore(storeId);
+      // First load from local database - NO LIMIT to get all products
+      _products = await _dataService.loadProductsByStore(storeId, limit: null);
       _isInitialized = true;
       _filterProducts();
+      notifyListeners(); // Show local data first
+
+      // Then sync with Firebase
+      print('🔄 Starting Firebase sync for products...');
+      await _syncService.syncFromFirebase();
+
+      // Reload after Firebase sync - NO LIMIT to get all products
+      _products = await _dataService.loadProductsByStore(storeId, limit: null);
+      _filterProducts();
+
+      print('🔍 LOADED PRODUCTS COUNT: ${_products.length}');
+      print('🔍 FILTERED PRODUCTS COUNT: ${_filteredProducts.length}');
+      print('🔍 SEARCH QUERY: "$_searchQuery"');
 
       // Stok kontrolü yap ve bildirimleri güncelle
       _notificationProvider?.checkLowStockProducts(_products);
 
       notifyListeners();
+      print('🔔 notifyListeners() called after Firebase sync');
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ Error loading products: $e');
     } finally {
       setLoading(false);
     }
@@ -74,16 +107,26 @@ class ProductProvider extends ChangeNotifier {
   Future<void> addProduct(Product product) async {
     try {
       // ✅ Store ID'sini otomatik ata
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
+      print('🔍 ADD CHECK - Current Store: $storeId');
+      print('🔍 ADD CHECK - Original Product Store: ${product.storeId}');
+
       final productWithStore = product.copyWith(storeId: storeId);
+      print('🔍 ADD CHECK - Final Product Store: ${productWithStore.storeId}');
+
       await _dataService.saveProduct(productWithStore);
+
+      // Immediately sync to Firebase
+      print('🔄 Syncing new product to Firebase...');
+      await _syncService.syncToFirebase();
+
       await refreshProducts(); // Force refresh to get updated data
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ Error adding product: $e');
       rethrow;
     }
   }
@@ -91,11 +134,17 @@ class ProductProvider extends ChangeNotifier {
   Future<void> updateProduct(Product product) async {
     try {
       // ✅ Store ID kontrolü - güvenlik için
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
-      if (product.storeId != storeId) {
+
+      // Debug store ID comparison
+      print('🔍 UPDATE CHECK - Current Store: $storeId');
+      print('🔍 UPDATE CHECK - Product Store: ${product.storeId}');
+      print('🔍 UPDATE CHECK - Match: ${product.storeId == storeId}');
+
+      if (product.storeId != storeId && product.storeId.isNotEmpty) {
         throw Exception('Bu ürünü düzenleme yetkiniz yok');
       }
 
@@ -119,7 +168,7 @@ class ProductProvider extends ChangeNotifier {
   Future<void> removeProduct(String productId) async {
     try {
       // ✅ Store ID kontrolü - güvenlik için
-      final storeId = currentStoreId;
+      final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }

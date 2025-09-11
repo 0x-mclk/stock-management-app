@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/firebase_auth_service.dart';
 import '../services/data_service.dart';
+import '../services/store_selection_service.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/supplier.dart';
@@ -28,7 +29,16 @@ class FirebaseSyncService {
     return connectivityResult != ConnectivityResult.none;
   }
 
-  // Get user's Firestore collection path
+  // Get store's Firestore collection path
+  Future<String> _getStoreCollectionPath(String collection) async {
+    final storeId = await StoreSelectionService.instance.getCurrentStoreId();
+    if (storeId.isEmpty) throw Exception('Store ID bulunamadı');
+
+    print('🔄 Firebase Sync - Store ID: $storeId, Collection: $collection');
+    return 'stores/$storeId/$collection';
+  }
+
+  // Legacy method for backward compatibility
   String _getUserCollectionPath(String collection) {
     final userId = _authService.currentUser?.uid;
     if (userId == null) throw Exception('Kullanıcı oturumu bulunamadı');
@@ -56,22 +66,37 @@ class FirebaseSyncService {
 
   // Sync products to Firebase
   Future<void> _syncProductsToFirebase() async {
-    final products = await _dataService.loadProducts();
-    final batch = _firestore.batch();
+    try {
+      // Get products for current store only
+      final storeId = await StoreSelectionService.instance.getCurrentStoreId();
+      final products =
+          await _dataService.loadProductsByStore(storeId, limit: null);
+      final batch = _firestore.batch();
 
-    final productsRef =
-        _firestore.collection(_getUserCollectionPath('products'));
+      final storeCollectionPath = await _getStoreCollectionPath('products');
+      final productsRef = _firestore.collection(storeCollectionPath);
 
-    for (final product in products) {
-      final docRef = productsRef.doc(product.id.toString());
-      batch.set(docRef, {
-        ...product.toMap(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'localId': product.id,
-      });
+      print('🔄 Syncing ${products.length} products to: $storeCollectionPath');
+
+      for (final product in products) {
+        final docRef = productsRef.doc(product.id.toString());
+        final productData = {
+          ...product.toMap(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'localId': product.id,
+        };
+
+        batch.set(docRef, productData);
+      }
+
+      print('🚀 Committing batch with ${products.length} products...');
+      await batch.commit();
+      print('✅ Products sync completed successfully!');
+    } catch (e, stackTrace) {
+      print('❌ ERROR in _syncProductsToFirebase: $e');
+      print('📍 Stack trace: $stackTrace');
+      rethrow;
     }
-
-    await batch.commit();
   }
 
   // Sync sales to Firebase
@@ -79,18 +104,25 @@ class FirebaseSyncService {
     final sales = await _dataService.loadSales();
     final batch = _firestore.batch();
 
-    final salesRef = _firestore.collection(_getUserCollectionPath('sales'));
+    final storeCollectionPath = await _getStoreCollectionPath('sales');
+    final salesRef = _firestore.collection(storeCollectionPath);
+
+    print('🔄 Syncing ${sales.length} sales to: $storeCollectionPath');
 
     for (final sale in sales) {
       final docRef = salesRef.doc(sale.id.toString());
-      batch.set(docRef, {
+      final saleData = {
         ...sale.toMap(),
         'updatedAt': FieldValue.serverTimestamp(),
         'localId': sale.id,
-      });
+      };
+
+      print('🔄 Syncing sale: ${sale.id} -> ${docRef.path}');
+      batch.set(docRef, saleData);
     }
 
     await batch.commit();
+    print('✅ Sales sync completed');
   }
 
   // Sync suppliers to Firebase
@@ -98,8 +130,10 @@ class FirebaseSyncService {
     final suppliers = await _dataService.loadSuppliers();
     final batch = _firestore.batch();
 
-    final suppliersRef =
-        _firestore.collection(_getUserCollectionPath('suppliers'));
+    final storeCollectionPath = await _getStoreCollectionPath('suppliers');
+    final suppliersRef = _firestore.collection(storeCollectionPath);
+
+    print('🔄 Syncing ${suppliers.length} suppliers to: $storeCollectionPath');
 
     for (final supplier in suppliers) {
       final docRef = suppliersRef.doc(supplier.id.toString());
@@ -111,6 +145,7 @@ class FirebaseSyncService {
     }
 
     await batch.commit();
+    print('✅ Suppliers sync completed');
   }
 
   // Sync from Firebase to local database
@@ -134,39 +169,73 @@ class FirebaseSyncService {
 
   // Sync products from Firebase
   Future<void> _syncProductsFromFirebase() async {
-    final snapshot =
-        await _firestore.collection(_getUserCollectionPath('products')).get();
+    final storeCollectionPath = await _getStoreCollectionPath('products');
+    final snapshot = await _firestore.collection(storeCollectionPath).get();
+
+    print(
+        '🔄 Syncing ${snapshot.docs.length} products from: $storeCollectionPath');
+
+    // Get current store ID for filtering
+    final storeId = await StoreSelectionService.instance.getCurrentStoreId();
+
+    // Log current local product count before sync
+    final currentLocalProducts =
+        await _dataService.loadProductsByStore(storeId, limit: null);
+    print(
+        '📊 Before sync - Local products count: ${currentLocalProducts.length}');
 
     for (final doc in snapshot.docs) {
       final data = doc.data();
       final product = Product.fromMap(data);
 
-      // Get all existing products and check if this one exists by barcode
-      final existingProducts = await _dataService.loadProducts();
+      // Get existing products for current store only
+      final existingProducts =
+          await _dataService.loadProductsByStore(storeId, limit: null);
       final existingProduct = existingProducts
           .where((p) => p.barcode == product.barcode)
           .firstOrNull;
 
       if (existingProduct == null) {
-        // Add new product
-        await _dataService.saveProduct(product);
+        // Add new product with proper store ID, but remove Firebase ID to let local DB generate new one
+        final productWithStore = product.copyWith(
+          forceNullId: true, // ⚠️ FORCE ID to be null for new products
+          storeId: storeId,
+        );
+        print(
+            '🆕 Adding NEW product - Firebase ID: ${product.id}, Name: ${product.name}, Barcode: ${product.barcode}');
+        await _dataService.saveProduct(productWithStore);
+        print('✅ Successfully added new product: ${product.name}');
       } else {
         // Update existing product if Firebase version is newer
         final firebaseUpdatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
 
         if (firebaseUpdatedAt != null &&
             firebaseUpdatedAt.isAfter(existingProduct.updatedAt)) {
-          await _dataService
-              .saveProduct(product.copyWith(id: existingProduct.id));
+          final updatedProduct = product.copyWith(
+            id: existingProduct.id, // Use local DB ID, not Firebase ID
+            storeId: storeId, // Ensure store ID is preserved
+          );
+          print(
+              '🔄 Updating existing product - Local ID: ${existingProduct.id}, Firebase ID: ${product.id}, Name: ${product.name}');
+          await _dataService.saveProduct(updatedProduct);
+          print('✅ Successfully updated product: ${product.name}');
         }
       }
     }
+
+    // Log final local product count after sync
+    final finalLocalProducts =
+        await _dataService.loadProductsByStore(storeId, limit: null);
+    print('📊 After sync - Local products count: ${finalLocalProducts.length}');
+    print('✅ Products sync from Firebase completed');
   }
 
   // Sync sales from Firebase
   Future<void> _syncSalesFromFirebase() async {
-    final snapshot =
-        await _firestore.collection(_getUserCollectionPath('sales')).get();
+    final storeCollectionPath = await _getStoreCollectionPath('sales');
+    final snapshot = await _firestore.collection(storeCollectionPath).get();
+
+    print('🔄 Syncing ${snapshot.docs.length} sales from: $storeCollectionPath');
 
     for (final doc in snapshot.docs) {
       final data = doc.data();
@@ -183,15 +252,20 @@ class FirebaseSyncService {
       if (existingSale == null) {
         // Add new sale
         await _dataService.saveSale(sale);
+        print('➕ Added new sale: ${sale.id}');
       }
       // Sales usually don't get updated, so we don't need to check for updates
     }
+    print('✅ Sales sync from Firebase completed');
   }
 
   // Sync suppliers from Firebase
   Future<void> _syncSuppliersFromFirebase() async {
-    final snapshot =
-        await _firestore.collection(_getUserCollectionPath('suppliers')).get();
+    final storeCollectionPath = await _getStoreCollectionPath('suppliers');
+    final snapshot = await _firestore.collection(storeCollectionPath).get();
+
+    print(
+        '🔄 Syncing ${snapshot.docs.length} suppliers from: $storeCollectionPath');
 
     for (final doc in snapshot.docs) {
       final data = doc.data();
@@ -205,6 +279,7 @@ class FirebaseSyncService {
       if (existingSupplier == null) {
         // Add new supplier
         await _dataService.saveSupplier(supplier);
+        print('➕ Added new supplier: ${supplier.name}');
       } else {
         // Update existing supplier if Firebase version is newer
         final firebaseUpdatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
@@ -213,9 +288,11 @@ class FirebaseSyncService {
             firebaseUpdatedAt.isAfter(existingSupplier.updatedAt)) {
           await _dataService
               .saveSupplier(supplier.copyWith(id: existingSupplier.id));
+          print('🔄 Updated supplier: ${supplier.name}');
         }
       }
     }
+    print('✅ Suppliers sync from Firebase completed');
   }
 
   // Bidirectional sync (recommended)

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // ✅ SharedPreferences import
 import '../services/auth_service.dart';
+import '../services/store_selection_service.dart';
 import '../screens/settings_screen.dart';
 import '../screens/my_store_screen.dart';
 
@@ -357,12 +358,20 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
     try {
       print('🔄 Starting complete logout process...');
 
-      // 1. SharedPreferences temizleme
+      // 1. Store Selection Service cache temizleme
+      try {
+        await StoreSelectionService.instance.clearCache();
+        print('✅ Store Selection cache cleared');
+      } catch (storeError) {
+        print('⚠️ Store Selection clearCache error: $storeError');
+      }
+
+      // 2. SharedPreferences temizleme
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear(); // Tüm verileri temizle
       print('✅ SharedPreferences cleared');
 
-      // 2. Firebase Auth çıkışı
+      // 3. Firebase Auth çıkışı
       try {
         await FirebaseAuth.instance.signOut();
         print('✅ Firebase Auth signed out');
@@ -371,7 +380,7 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
         // Firebase hatası olsa bile devam et
       }
 
-      // 3. AuthService logout çağrısı
+      // 4. AuthService logout çağrısı
       try {
         final authResult =
             await AuthService.instance.logout(clearRemembered: true);

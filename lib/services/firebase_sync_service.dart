@@ -178,22 +178,22 @@ class FirebaseSyncService {
     // Get current store ID for filtering
     final storeId = await StoreSelectionService.instance.getCurrentStoreId();
 
-    // Log current local product count before sync
-    final currentLocalProducts =
+    // ✅ Load existing products ONCE before the loop to prevent conflicts
+    final existingProducts =
         await _dataService.loadProductsByStore(storeId, limit: null);
-    print(
-        '📊 Before sync - Local products count: ${currentLocalProducts.length}');
+    print('📊 Before sync - Local products count: ${existingProducts.length}');
+
+    // Create a map for faster barcode lookup
+    final Map<String, Product> existingProductsByBarcode = {
+      for (final product in existingProducts) product.barcode: product
+    };
 
     for (final doc in snapshot.docs) {
       final data = doc.data();
       final product = Product.fromMap(data);
 
-      // Get existing products for current store only
-      final existingProducts =
-          await _dataService.loadProductsByStore(storeId, limit: null);
-      final existingProduct = existingProducts
-          .where((p) => p.barcode == product.barcode)
-          .firstOrNull;
+      // ✅ Use pre-loaded products map for fast lookup
+      final existingProduct = existingProductsByBarcode[product.barcode];
 
       if (existingProduct == null) {
         // Add new product with proper store ID, but remove Firebase ID to let local DB generate new one
@@ -235,7 +235,8 @@ class FirebaseSyncService {
     final storeCollectionPath = await _getStoreCollectionPath('sales');
     final snapshot = await _firestore.collection(storeCollectionPath).get();
 
-    print('🔄 Syncing ${snapshot.docs.length} sales from: $storeCollectionPath');
+    print(
+        '🔄 Syncing ${snapshot.docs.length} sales from: $storeCollectionPath');
 
     for (final doc in snapshot.docs) {
       final data = doc.data();

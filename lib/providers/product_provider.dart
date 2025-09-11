@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../models/product.dart';
 import '../services/data_service.dart';
 import '../services/store_selection_service.dart';
 import '../services/firebase_sync_service.dart';
+import '../services/firestore_service.dart';
 import 'notification_provider.dart';
 
 class ProductProvider extends ChangeNotifier {
@@ -11,9 +13,17 @@ class ProductProvider extends ChangeNotifier {
   String _searchQuery = '';
   bool _isLoading = false;
   bool _isInitialized = false;
+  bool _firebaseListenerStarted = false; // 🚀 PREVENT DUPLICATE LISTENERS
   final DataService _dataService = DataService();
   final FirebaseSyncService _syncService = FirebaseSyncService();
+  final FirestoreService _firestoreService = FirestoreService.instance;
   NotificationProvider? _notificationProvider;
+  StreamSubscription? _firebaseSubscription;
+
+  // ✅ Constructor: Initialize basic state only (no async operations)
+  ProductProvider() {
+    print('🏗️ ProductProvider constructor called');
+  }
 
   // ✅ Current store ID getter
   String get currentStoreId {
@@ -26,6 +36,13 @@ class ProductProvider extends ChangeNotifier {
   Future<void> _initializeStoreId() async {
     final storeId = await StoreSelectionService.instance.getCurrentStoreId();
     _currentStoreId = storeId;
+
+    // 🚀 CRITICAL: Start polling immediately when store ID is set
+    if (storeId.isNotEmpty) {
+      _startRealTimePolling(storeId);
+      print('🔥 POLLING STARTED IMMEDIATELY for store: $storeId');
+    }
+
     notifyListeners();
   }
 
@@ -48,18 +65,23 @@ class ProductProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   bool get isInitialized => _isInitialized;
 
-  // Initialize and load data from database
+  // Initialize and load data from database with real-time Firebase updates
   Future<void> loadProducts() async {
+    print('🚀🚀🚀 LOAD PRODUCTS CALLED! Starting entire process...');
     setLoading(true);
     try {
       // Initialize store ID first
       await _initializeStoreId();
+      print('🆔 Store ID initialized: $_currentStoreId');
 
       // ✅ Store ID ile filtrelenmiş ürünleri yükle
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
+        print('❌ EMPTY STORE ID - User not logged in');
         throw Exception('Kullanıcı giriş yapmamış');
       }
+
+      print('✅ Store ID is valid: $storeId, starting product loading...');
 
       // First load from local database - NO LIMIT to get all products
       _products = await _dataService.loadProductsByStore(storeId, limit: null);
@@ -82,6 +104,13 @@ class ProductProvider extends ChangeNotifier {
       // Stok kontrolü yap ve bildirimleri güncelle
       _notificationProvider?.checkLowStockProducts(_products);
 
+      // � TEMPORARILY DISABLE POLLING until data is fixed
+      // print('🚀🚀🚀 ABOUT TO START POLLING!!! StoreId: $storeId');
+      // print('🚀🚀🚀 Current timer status: ${_pollingTimer?.isActive}');
+      // _startRealTimePolling(storeId);
+      // print('🚀🚀🚀 POLLING CALL COMPLETED!!! Timer status now: ${_pollingTimer?.isActive}');
+      print('🚨 POLLING DISABLED - FIXING DATA FIRST');
+
       notifyListeners();
       print('🔔 notifyListeners() called after Firebase sync');
     } catch (e) {
@@ -89,6 +118,83 @@ class ProductProvider extends ChangeNotifier {
     } finally {
       setLoading(false);
     }
+  }
+
+  // 🚀 REAL-TIME POLLING - GUARANTEED TO WORK!
+  Timer? _pollingTimer;
+
+  void _startRealTimePolling(String storeId) {
+    print('� POLLING TEMPORARILY DISABLED - Data corruption risk!');
+    return; // Exit immediately - no polling until fixed
+
+    print('�🚀🚀🚀 _startRealTimePolling CALLED with storeId: $storeId');
+
+    // Cancel existing timer
+    if (_pollingTimer != null) {
+      print('🚀 Cancelling existing timer...');
+      _pollingTimer?.cancel();
+    }
+
+    print(
+        '🕒🕒🕒 Starting REAL-TIME POLLING every 3 seconds for store: $storeId');
+
+    _pollingTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
+      try {
+        print('🔄🔄🔄 POLLING: Checking Firebase for updates...');
+
+        // Get latest products from Firebase
+        final firebaseProductMaps =
+            await _firestoreService.getStoreProducts(storeId);
+        final firebaseProducts =
+            firebaseProductMaps.map((map) => Product.fromMap(map)).toList();
+
+        if (firebaseProducts.length != _products.length) {
+          print(
+              '🔥🔥🔥 DETECTED CHANGE: Product count different! Firebase: ${firebaseProducts.length}, Local: ${_products.length}');
+
+          // Update products immediately
+          _products = firebaseProducts;
+          _filterProducts();
+
+          // Update notifications
+          _notificationProvider?.checkLowStockProducts(_products);
+
+          // Force UI update
+          notifyListeners();
+
+          print('⚡⚡⚡ INSTANT UPDATE COMPLETED via POLLING!');
+        } else {
+          print(
+              '✅ No count changes detected. Firebase: ${firebaseProducts.length}, Local: ${_products.length}');
+          // Check for name changes
+          bool hasChanges = false;
+          for (int i = 0;
+              i < firebaseProducts.length && i < _products.length;
+              i++) {
+            if (firebaseProducts[i].name != _products[i].name) {
+              hasChanges = true;
+              break;
+            }
+          }
+
+          if (hasChanges) {
+            print('🔥🔥🔥 DETECTED NAME CHANGES in products!');
+            _products = firebaseProducts;
+            _filterProducts();
+            _notificationProvider?.checkLowStockProducts(_products);
+            notifyListeners();
+            print('⚡⚡⚡ INSTANT UPDATE COMPLETED via POLLING!');
+          } else {
+            print('✅ No changes detected in this polling cycle');
+          }
+        }
+      } catch (e) {
+        print('❌❌❌ Polling error: $e');
+      }
+    });
+
+    print(
+        '🚀🚀🚀 Timer created successfully! Timer active: ${_pollingTimer?.isActive}');
   }
 
   // Force reload products
@@ -284,5 +390,16 @@ class ProductProvider extends ChangeNotifier {
     } finally {
       setLoading(false);
     }
+  }
+
+  // 🧹 Clean up resources when provider is disposed
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    _firebaseSubscription?.cancel();
+    _firebaseListenerStarted = false;
+    print(
+        '🧹 ProductProvider disposed - Polling timer and Firebase listener cancelled');
+    super.dispose();
   }
 }

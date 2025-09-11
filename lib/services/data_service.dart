@@ -51,12 +51,44 @@ class DataService {
           '💾 SAVE PRODUCT - ID: ${product.id}, Name: ${product.name}, StoreID: ${product.storeId}');
 
       if (product.id == null) {
-        // New product - insert
+        // New product - insert with barcode conflict handling
         final productMap = product.toMap();
         productMap.remove('id'); // Remove ID for auto-generation
         print('➕ INSERTING new product: ${product.name}');
-        final newId = await _databaseService.insert('products', productMap);
-        print('✅ NEW PRODUCT inserted with ID: $newId');
+
+        try {
+          final newId = await _databaseService.insert('products', productMap);
+          print('✅ NEW PRODUCT inserted with ID: $newId');
+        } catch (e) {
+          if (e
+              .toString()
+              .contains('UNIQUE constraint failed: products.barcode')) {
+            print(
+                '⚠️ Barcode ${product.barcode} already exists. Checking for existing product...');
+
+            // Find existing product with same barcode and update it instead
+            final existingProducts = await loadProducts();
+            final existingProduct = existingProducts
+                .where((p) => p.barcode == product.barcode)
+                .firstOrNull;
+
+            if (existingProduct != null) {
+              print(
+                  '🔄 Found existing product with barcode ${product.barcode}. Updating instead...');
+              final updatedProduct = product.copyWith(
+                id: existingProduct.id, // Use existing product's ID
+              );
+              await saveProduct(updatedProduct); // Recursive call with ID
+              return;
+            } else {
+              print(
+                  '❌ No existing product found with barcode ${product.barcode}, but constraint failed');
+              rethrow;
+            }
+          } else {
+            rethrow;
+          }
+        }
       } else {
         // Existing product - update
         print('🔄 UPDATING existing product ID: ${product.id}');

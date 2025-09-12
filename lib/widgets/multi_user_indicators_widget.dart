@@ -25,6 +25,8 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
   @override
   void initState() {
     super.initState();
+    print(
+        '🚀 MultiUserIndicatorsWidget initState - StoreID: ${widget.storeId}, UserID: ${widget.currentUserId}');
     _updateUserActivity();
   }
 
@@ -37,21 +39,69 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
 
   @override
   Widget build(BuildContext context) {
+    print('🔄 MultiUserIndicatorsWidget build called');
     return Column(
       children: [
+        // Test mesajı - görünürlük testi
+        Container(
+          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.1),
+            border: Border.all(color: Colors.red, width: 2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Text(
+            '🔄 YENİ TAKIM DURUMU WİDGET AKTİF!',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ),
         _buildOnlineUsers(),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         _buildMemberOverview(),
       ],
     );
   }
 
   Widget _buildOnlineUsers() {
+    print('📊 Building online users stream for StoreID: ${widget.storeId}');
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _realTimeService.getUserActivityStream(widget.storeId),
       builder: (context, snapshot) {
+        print(
+            '📊 Stream state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, error: ${snapshot.error}');
+
+        if (snapshot.hasError) {
+          print('❌ Stream error: ${snapshot.error}');
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Hata: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red, fontSize: 12),
+            ),
+          );
+        }
+
         if (!snapshot.hasData) {
-          return SizedBox.shrink();
+          print('⏳ No data yet, showing loading...');
+          return Container(
+            padding: const EdgeInsets.all(12),
+            child: const Center(
+              child: SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
         }
 
         final users = snapshot.data!;
@@ -69,15 +119,15 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
 
         if (onlineUsers.isEmpty) {
           return Container(
-            padding: EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.grey.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Icon(Icons.person_outline, color: Colors.grey, size: 16),
-                SizedBox(width: 8),
+                const Icon(Icons.person_outline, color: Colors.grey, size: 16),
+                const SizedBox(width: 8),
                 Text(
                   'Şu anda sadece siz çevrimisiniz',
                   style: TextStyle(
@@ -91,7 +141,7 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
         }
 
         return Container(
-          padding: EdgeInsets.all(12),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Colors.green.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
@@ -105,12 +155,12 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                   Container(
                     width: 8,
                     height: 8,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: Colors.green,
                       shape: BoxShape.circle,
                     ),
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Text(
                     'Çevrimiçi Takım (${onlineUsers.length})',
                     style: TextStyle(
@@ -121,7 +171,7 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                   ),
                 ],
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
@@ -160,7 +210,7 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
     }
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: chipColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
@@ -180,7 +230,7 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
               shape: BoxShape.circle,
             ),
           ),
-          SizedBox(width: 6),
+          const SizedBox(width: 6),
           Text(
             isCurrentUser ? '$username (Sen)' : username,
             style: TextStyle(
@@ -195,72 +245,321 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
   }
 
   Widget _buildMemberOverview() {
+    print('📊 Building member overview stream for StoreID: ${widget.storeId}');
     return StreamBuilder<List<InvitationModel>>(
       stream: _invitationService.getMembersStream(widget.storeId),
       builder: (context, snapshot) {
+        print(
+            '📊 Member stream state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, error: ${snapshot.error}');
+
+        if (snapshot.hasError) {
+          print('❌ Member stream error: ${snapshot.error}');
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Üye listesi hatası: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red, fontSize: 12),
+            ),
+          );
+        }
+
         if (!snapshot.hasData) {
-          return SizedBox.shrink();
+          print('⏳ Member data loading...');
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20.0),
+              child: CircularProgressIndicator(),
+            ),
+          );
         }
 
         final members = snapshot.data!;
-        final activeMembers = members.where((m) => m.isActive).toList();
+        final activeMembers = members
+            .where((m) =>
+                m.status == InvitationStatus.owner ||
+                m.status == InvitationStatus.accepted)
+            .toList();
         final pendingInvites = members
             .where((m) =>
                 m.status == InvitationStatus.invited ||
                 m.status == InvitationStatus.pending)
             .toList();
 
-        return Container(
-          padding: EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-          ),
-          child: Column(
-            children: [
-              Row(
+        return Column(
+          children: [
+            // Genel özet
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+              ),
+              child: Column(
                 children: [
-                  Icon(Icons.groups, color: Colors.blue, size: 16),
-                  SizedBox(width: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.groups, color: Colors.blue, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Takım Özeti',
+                        style: TextStyle(
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildStatItem(
+                        'Aktif',
+                        activeMembers.length.toString(),
+                        Colors.green,
+                        Icons.check_circle,
+                      ),
+                      _buildStatItem(
+                        'Bekleyen',
+                        pendingInvites.length.toString(),
+                        Colors.orange,
+                        Icons.schedule,
+                      ),
+                      _buildStatItem(
+                        'Toplam',
+                        members.length.toString(),
+                        Colors.blue,
+                        Icons.group,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Detaylı üye listesi
+            if (activeMembers.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border:
+                      Border.all(color: Colors.green.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.people, color: Colors.green, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Aktif Takım Üyeleri (${activeMembers.length})',
+                          style: TextStyle(
+                            color: Colors.green[700],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...activeMembers.map((member) => _buildMemberTile(member)),
+                  ],
+                ),
+              ),
+
+            if (pendingInvites.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border:
+                      Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.schedule,
+                            color: Colors.orange, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Bekleyen Davetler (${pendingInvites.length})',
+                          style: TextStyle(
+                            color: Colors.orange[700],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...pendingInvites.map((member) => _buildMemberTile(member)),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMemberTile(InvitationModel member) {
+    final isCurrentUser = member.userId == widget.currentUserId;
+    final roleColor = _getRoleColor(member.role);
+    final statusColor = _getStatusColor(member.status);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isCurrentUser
+              ? Colors.blue.withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.2),
+          width: isCurrentUser ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.1),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Avatar
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: roleColor.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: roleColor.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Icon(
+              _getRoleIcon(member.role),
+              color: roleColor,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Kullanıcı bilgileri
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        member.email,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color:
+                              isCurrentUser ? Colors.blue[700] : Colors.black87,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isCurrentUser)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          'Siz',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.blue[700],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    // Rol badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: roleColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _getRoleDisplayName(member.role),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: roleColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Durum badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _getStatusDisplayName(member.status),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: statusColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Son aktivite (varsa)
+                if (member.lastActivity != null) ...[
+                  const SizedBox(height: 4),
                   Text(
-                    'Takım Durumu',
+                    'Son aktivite: ${_formatLastActivity(member.lastActivity!)}',
                     style: TextStyle(
-                      color: Colors.blue[700],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: 10,
+                      color: Colors.grey[600],
                     ),
                   ),
                 ],
-              ),
-              SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStatItem(
-                    'Aktif',
-                    activeMembers.length.toString(),
-                    Colors.green,
-                    Icons.check_circle,
-                  ),
-                  _buildStatItem(
-                    'Bekleyen',
-                    pendingInvites.length.toString(),
-                    Colors.orange,
-                    Icons.schedule,
-                  ),
-                  _buildStatItem(
-                    'Toplam',
-                    members.length.toString(),
-                    Colors.blue,
-                    Icons.group,
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -269,14 +568,14 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
     return Column(
       children: [
         Container(
-          padding: EdgeInsets.all(8),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: color, size: 20),
         ),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Text(
           value,
           style: TextStyle(
@@ -295,8 +594,93 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
       ],
     );
   }
+
+  // Yardımcı metodlar
+  Color _getRoleColor(UserRole role) {
+    switch (role) {
+      case UserRole.owner:
+        return Colors.purple;
+      case UserRole.manager:
+        return Colors.blue;
+      case UserRole.staff:
+        return Colors.green;
+      case UserRole.partner:
+        return Colors.orange;
+    }
+  }
+
+  IconData _getRoleIcon(UserRole role) {
+    switch (role) {
+      case UserRole.owner:
+        return Icons.star;
+      case UserRole.manager:
+        return Icons.manage_accounts;
+      case UserRole.staff:
+        return Icons.person;
+      case UserRole.partner:
+        return Icons.handshake;
+    }
+  }
+
+  String _getRoleDisplayName(UserRole role) {
+    switch (role) {
+      case UserRole.owner:
+        return 'Sahip';
+      case UserRole.manager:
+        return 'Yönetici';
+      case UserRole.staff:
+        return 'Personel';
+      case UserRole.partner:
+        return 'Ortak';
+    }
+  }
+
+  Color _getStatusColor(InvitationStatus status) {
+    switch (status) {
+      case InvitationStatus.owner:
+        return Colors.purple;
+      case InvitationStatus.accepted:
+        return Colors.green;
+      case InvitationStatus.invited:
+        return Colors.blue;
+      case InvitationStatus.pending:
+        return Colors.orange;
+      case InvitationStatus.approved:
+        return Colors.teal;
+      case InvitationStatus.rejected:
+        return Colors.red;
+    }
+  }
+
+  String _getStatusDisplayName(InvitationStatus status) {
+    switch (status) {
+      case InvitationStatus.owner:
+        return 'Sahip';
+      case InvitationStatus.accepted:
+        return 'Aktif';
+      case InvitationStatus.invited:
+        return 'Davet Edildi';
+      case InvitationStatus.pending:
+        return 'Beklemede';
+      case InvitationStatus.approved:
+        return 'Onaylandı';
+      case InvitationStatus.rejected:
+        return 'Reddedildi';
+    }
+  }
+
+  String _formatLastActivity(DateTime lastActivity) {
+    final now = DateTime.now();
+    final difference = now.difference(lastActivity);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays} gün önce';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} saat önce';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} dakika önce';
+    } else {
+      return 'Az önce';
+    }
+  }
 }
-
-
-
-

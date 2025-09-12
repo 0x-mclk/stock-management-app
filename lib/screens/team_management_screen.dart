@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/multi_user_indicators_widget.dart';
 import '../services/invitation_service.dart';
+import '../services/store_selection_service.dart';
 import '../models/invitation_model.dart';
 import 'admin_approval_screen.dart';
 
@@ -16,6 +18,34 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
   final TextEditingController _emailController = TextEditingController();
   UserRole _selectedRole = UserRole.staff;
   bool _isLoading = false;
+  String? _currentStoreId;
+  String? _currentUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeUserData();
+  }
+
+  Future<void> _initializeUserData() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    print('🔍 Initializing user data...');
+    if (currentUser != null) {
+      // Aynı store service kullanarak Store ID alın
+      final storeSelectionService = StoreSelectionService.instance;
+      final storeId = await storeSelectionService.getCurrentStoreId();
+
+      print('🏦 Firebase User ID: ${currentUser.uid}');
+      print('🏦 Store ID from StoreSelectionService: $storeId');
+
+      setState(() {
+        _currentUserId = currentUser.uid;
+        _currentStoreId = storeId; // Service'den gelen Store ID kullan
+      });
+    } else {
+      print('❌ No current user found');
+    }
+  }
 
   @override
   void dispose() {
@@ -29,25 +59,21 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
       return;
     }
 
+    if (_currentStoreId == null || _currentUserId == null) {
+      _showMessage('Kullanıcı bilgileri yüklenemedi', isError: true);
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        _showMessage('Giriş yapmanız gerekiyor', isError: true);
-        return;
-      }
-
-      // ✅ Dinamik store ID - Her kullanıcının kendi mağazası
-      final storeId = 'store_${currentUser.uid}';
-
       final invitationId = await InvitationService.instance.sendInvitation(
-        storeId: storeId, // ✅ Dinamik store ID kullan
+        storeId: _currentStoreId!, // Dinamik store ID kullan
         email: _emailController.text.trim(),
         role: _selectedRole,
-        invitedBy: currentUser.uid,
+        invitedBy: _currentUserId!,
       );
 
       if (invitationId != null) {
@@ -79,16 +105,30 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Kullanıcı verisi yüklenene kadar loading göster
+    if (_currentStoreId == null || _currentUserId == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Takım Yönetimi'),
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Takım Yönetimi'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
-          // Admin Approval Button
+          // Admin Approval Button - Dinamik store ID kullan
           StreamBuilder<List<InvitationModel>>(
             stream: InvitationService.instance
-                .getPendingApprovalsStream('default_store'),
+                .getPendingApprovalsStream(_currentStoreId!),
             builder: (context, snapshot) {
               final pendingCount = snapshot.data?.length ?? 0;
 
@@ -99,9 +139,9 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const AdminApprovalScreen(
-                            storeId: 'default_store',
-                            storeName: 'Ana Mağaza',
+                          builder: (context) => AdminApprovalScreen(
+                            storeId: _currentStoreId!,
+                            storeName: 'Mağazam',
                           ),
                         ),
                       );
@@ -162,7 +202,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                         ),
                         const SizedBox(width: 8),
                         const Text(
-                          'Takım Durumu',
+                          'Takım Durumu - Güncellendi',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -173,10 +213,8 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                     ),
                     const SizedBox(height: 16),
                     MultiUserIndicatorsWidget(
-                      storeId:
-                          'default_store', // Bu kısım gerçek store ID ile değiştirilmeli
-                      currentUserId:
-                          FirebaseAuth.instance.currentUser?.uid ?? '',
+                      storeId: _currentStoreId!, // Dinamik store ID kullan
+                      currentUserId: _currentUserId!, // Dinamik user ID kullan
                     ),
                   ],
                 ),

@@ -119,6 +119,26 @@ class DataService {
     }
   }
 
+  // Get product by ID
+  Future<Product?> getProductById(String productId) async {
+    try {
+      final maps = await _databaseService.query(
+        'products',
+        where: 'id = ?',
+        whereArgs: [productId],
+      );
+
+      if (maps.isEmpty) {
+        return null;
+      }
+
+      return Product.fromMap(maps.first);
+    } catch (e) {
+      // // Debug print removed // Removed for production
+      return null;
+    }
+  }
+
   // Sales CRUD operations
   Future<List<Sale>> loadSales({int? limit}) async {
     try {

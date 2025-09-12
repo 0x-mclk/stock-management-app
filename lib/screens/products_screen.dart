@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:excel/excel.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Add for real-time updates
+
 import '../providers/product_provider.dart';
 import '../models/product.dart';
 import '../utils/currency_formatter.dart';
 import 'barcode_scanner_screen.dart';
 import 'add_product_with_camera_screen.dart';
 import 'qr_product_analysis_screen.dart';
+
+// Excel import/export
+import 'package:file_picker/file_picker.dart';
+import 'package:excel/excel.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:flutter/services.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});

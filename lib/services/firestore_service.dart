@@ -14,16 +14,6 @@ class FirestoreService {
   static FirestoreService get instance => _instance ??= FirestoreService._();
   FirestoreService._();
 
-  /// Get products stream for a store
-  Stream<QuerySnapshot> getProductsStream(String storeId) {
-    return _firestore
-        .collection(_collectionProducts)
-        .doc(storeId)
-        .collection('items')
-        .orderBy('name')
-        .snapshots();
-  }
-
   /// Add or update product
   Future<bool> saveProduct(String storeId, String? productId,
       Map<String, dynamic> productData) async {
@@ -33,16 +23,16 @@ class FirestoreService {
       if (productId == null) {
         // Add new product
         await _firestore
-            .collection(_collectionProducts)
+            .collection(_collectionStores)
             .doc(storeId)
-            .collection('items')
+            .collection(_collectionProducts)
             .add(productData);
       } else {
         // Update existing product
         await _firestore
-            .collection(_collectionProducts)
+            .collection(_collectionStores)
             .doc(storeId)
-            .collection('items')
+            .collection(_collectionProducts)
             .doc(productId)
             .update(productData);
       }
@@ -57,9 +47,9 @@ class FirestoreService {
   Future<bool> deleteProduct(String storeId, String productId) async {
     try {
       await _firestore
-          .collection(_collectionProducts)
+          .collection(_collectionStores)
           .doc(storeId)
-          .collection('items')
+          .collection(_collectionProducts)
           .doc(productId)
           .delete();
       return true;
@@ -964,7 +954,7 @@ class FirestoreService {
     return _firestore
         .collection(_collectionStores)
         .doc(storeId)
-        .collection('products')
+        .collection(_collectionProducts)
         .orderBy('name')
         .snapshots();
   }

@@ -7,6 +7,10 @@ import '../services/firebase_sync_service.dart';
 import '../services/firestore_service.dart';
 import 'notification_provider.dart';
 
+// ✅ Add these imports for Firestore document changes
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+
 class ProductProvider extends ChangeNotifier {
   List<Product> _products = [];
   List<Product> _filteredProducts = [];
@@ -129,7 +133,33 @@ class ProductProvider extends ChangeNotifier {
         _firestoreService.getStoreProductsStream(storeId).listen(
       (snapshot) {
         print('🔥 Real-time update received: ${snapshot.docs.length} products');
-        _handleFirebaseStreamUpdate(snapshot);
+
+        // Process each document change individually
+        snapshot.docChanges.forEach((change) {
+          final doc = change.doc;
+          final data = doc.data() as Map<String, dynamic>;
+          final product = Product.fromMap({...data, 'id': doc.id});
+
+          switch (change.type) {
+            case DocumentChangeType.added:
+              print(
+                  '🆕 NEW product added: ${product.name} (ID: ${product.id})');
+              _handleProductAdded(product);
+            case DocumentChangeType.modified:
+              print('🔄 Product modified: ${product.name} (ID: ${product.id})');
+              _handleProductModified(product);
+            case DocumentChangeType.removed:
+              print('🗑️ Product removed: ${product.name} (ID: ${product.id})');
+              _handleProductRemoved(product);
+            default:
+              print(
+                  '❓ Unknown change type for product: ${product.name} (ID: ${product.id})');
+          }
+        });
+
+        // Reload products to update UI
+        _loadProductsFromDatabase();
+        notifyListeners();
       },
       onError: (error) {
         print('❌ Firebase stream error: $error');
@@ -140,60 +170,52 @@ class ProductProvider extends ChangeNotifier {
     print('🔥 Firebase listener started successfully');
   }
 
-  // Handle Firebase stream updates
-  void _handleFirebaseStreamUpdate(dynamic snapshot) async {
-    try {
-      print('🔄 Processing Firebase stream update...');
+  void _handleProductAdded(Product product) async {
+    final storeId = _currentStoreId ?? '';
+    if (storeId.isEmpty) return;
 
-      // Convert Firebase data to Product models
-      final firebaseProducts = snapshot.docs.map<Product>((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return Product.fromMap({...data, 'id': doc.id});
-      }).toList();
-
-      // 🗑️ CRITICAL: Handle deletions - remove products that exist locally but not in Firebase
-      final storeId = _currentStoreId ?? '';
-      if (storeId.isNotEmpty) {
-        // Get current local products
-        final localProducts =
-            await _dataService.loadProductsByStore(storeId, limit: null);
-
-        // Find products that exist locally but not in Firebase (these were deleted)
-        final firebaseProductIds = firebaseProducts.map((p) => p.id).toSet();
-        final productsToDelete = localProducts
-            .where(
-                (localProduct) => !firebaseProductIds.contains(localProduct.id))
-            .toList();
-
-        // Delete products that don't exist in Firebase anymore
-        for (final productToDelete in productsToDelete) {
-          final productId = productToDelete.id;
-          if (productId != null && productId.isNotEmpty) {
-            print(
-                '🗑️ DELETING product locally (removed from Firebase): ${productToDelete.name} (ID: $productId)');
-            await _dataService.deleteProduct(productId);
-          }
-        }
-
-        if (productsToDelete.isNotEmpty) {
-          print(
-              '🗑️ Deleted ${productsToDelete.length} products that were removed from Firebase');
-        }
-      }
-
-      // 💾 Update/Save products that exist in Firebase
-      for (final product in firebaseProducts) {
-        await _dataService.saveProduct(product);
-      }
-
-      // 🔄 Reload products from database to reflect all changes
-      await _loadProductsFromDatabase();
-
-      print(
-          '✅ Real-time update completed: ${firebaseProducts.length} products');
-    } catch (e) {
-      print('❌ Error processing Firebase stream update: $e');
+    // Check if product already exists locally
+    if (product.id == null) {
+      print('❌ Product ID is null');
+      return;
     }
+
+    final localProduct = await _dataService.getProductById(product.id!);
+    if (localProduct == null) {
+      // Product doesn't exist locally, add it
+      await _dataService.saveProduct(product);
+      print('✅ Product saved to local DB: ${product.name} (ID: ${product.id})');
+    } else if (localProduct.updatedAt?.isBefore(product.updatedAt) ?? true) {
+      // Product exists but Firebase has newer version
+      await _dataService.saveProduct(product);
+      print(
+          '🔄 Product updated in local DB: ${product.name} (ID: ${product.id})');
+    }
+  }
+
+  void _handleProductModified(Product product) async {
+    final storeId = _currentStoreId ?? '';
+    if (storeId.isEmpty) return;
+
+    // Always update modified products
+    await _dataService.saveProduct(product);
+    print(
+        '🔄 Product updated in local DB: ${product.name} (ID: ${product.id})');
+  }
+
+  void _handleProductRemoved(Product product) async {
+    final storeId = _currentStoreId ?? '';
+    if (storeId.isEmpty) return;
+
+    if (product.id == null) {
+      print('❌ Product ID is null');
+      return;
+    }
+
+    // Delete product from local database
+    await _dataService.deleteProduct(product.id!);
+    print(
+        '🗑️ Product deleted from local DB: ${product.name} (ID: ${product.id})');
   }
 
   // Force reload products
@@ -217,9 +239,22 @@ class ProductProvider extends ChangeNotifier {
       }
 
       final productWithStore = product.copyWith(storeId: storeId);
-      await _dataService.saveProduct(productWithStore);
 
-      // Real-time stream will handle the update
+      // 1️⃣ Önce yerel veritabanına kaydet
+      await _dataService.saveProduct(productWithStore);
+      print('✅ Ürün yerel veritabanına kaydedildi: ${productWithStore.name}');
+
+      // 2️⃣ Firebase'e de kaydet
+      try {
+        print('🔄 Yeni ürün Firebase\'e kaydediliyor...');
+        await _syncService.syncToFirebase();
+        print('✅ Ürün Firebase\'e başarıyla kaydedildi');
+      } catch (e) {
+        print('⚠️ Firebase senkronizasyon hatası: $e');
+        // Firebase hatası olsa bile yerel kayıt başarılı olduğu için devam et
+      }
+
+      // 3️⃣ Ürün listesini yenile
       await refreshProducts();
     } catch (e) {
       print('❌ Error adding product: $e');
@@ -238,7 +273,21 @@ class ProductProvider extends ChangeNotifier {
         throw Exception('Bu ürünü düzenleme yetkiniz yok');
       }
 
+      // 1️⃣ Önce yerel veritabanına kaydet
       await _dataService.saveProduct(product);
+      print('✅ Ürün yerel veritabanında güncellendi: ${product.name}');
+
+      // 2️⃣ Firebase'e de kaydet
+      try {
+        print('🔄 Ürün güncellemesi Firebase\'e gönderiliyor...');
+        await _syncService.syncToFirebase();
+        print('✅ Ürün Firebase\'de başarıyla güncellendi');
+      } catch (e) {
+        print('⚠️ Firebase senkronizasyon hatası: $e');
+        // Firebase hatası olsa bile yerel güncelleme başarılı olduğu için devam et
+      }
+
+      // 3️⃣ Yerel UI'yı güncelle
       final index = _products.indexWhere((p) => p.id == product.id);
       if (index != -1) {
         _products[index] = product;
@@ -264,16 +313,27 @@ class ProductProvider extends ChangeNotifier {
         throw Exception('Bu ürünü silme yetkiniz yok');
       }
 
-      // 🗑️ Delete from local database
+      if (productId == null) {
+        print('❌ Product ID is null');
+        return;
+      }
+
+      // 1️⃣ Önce yerel veritabanından sil
       await _dataService.deleteProduct(productId);
+      print('✅ Ürün yerel veritabanından silindi: ${product.name}');
 
-      // 🔥 CRITICAL: Delete from Firebase as well
-      print(
-          '🗑️ Deleting product from Firebase: ${product.name} (ID: $productId)');
-      await _firestoreService.deleteProduct(storeId, productId);
-      print('✅ Product deleted from Firebase successfully');
+      // 2️⃣ Firebase'den de sil
+      try {
+        print(
+            '🗑️ Ürün Firebase\'den siliniyor: ${product.name} (ID: $productId)');
+        await _firestoreService.deleteProduct(storeId, productId);
+        print('✅ Ürün Firebase\'den başarıyla silindi');
+      } catch (e) {
+        print('⚠️ Firebase silme hatası: $e');
+        // Firebase hatası olsa bile yerel silme başarılı olduğu için devam et
+      }
 
-      // Update local UI
+      // 3️⃣ Yerel UI'yı güncelle
       _products.removeWhere((p) => p.id == productId);
       _filterProducts();
       notifyListeners();

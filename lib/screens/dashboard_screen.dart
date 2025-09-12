@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:stock_management_app/screens/realtime_test_screen.dart';
 import '../providers/product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/supplier_provider.dart';
@@ -320,12 +320,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           () => _openPriceCheck(context),
         ),
         _buildQuickActionButton(
-          'Firebase Test',
-          Icons.wifi,
-          Colors.red,
-          () => _openFirebaseTest(context),
-        ),
-        _buildQuickActionButton(
           'Raporlar',
           Icons.assessment,
           Colors.purple,
@@ -380,14 +374,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const NotificationsScreen(),
-      ),
-    );
-  }
-
-  void _openFirebaseTest(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => RealtimeTestScreen(),
       ),
     );
   }

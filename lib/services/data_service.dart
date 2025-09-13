@@ -174,6 +174,11 @@ class DataService {
   // ✅ Store ID ile filtrelenmiş satışları yükle
   Future<List<Sale>> loadSalesByStore(String storeId, {int? limit}) async {
     try {
+      if (storeId.isEmpty) {
+        print('⚠️ Empty store ID provided to loadSalesByStore');
+        return [];
+      }
+
       final maps = await _databaseService.query(
         'sales',
         where: 'store_id = ?',
@@ -195,12 +200,21 @@ class DataService {
         final items =
             itemMaps.map((itemMap) => SaleItem.fromMap(itemMap)).toList();
         final sale = Sale.fromMap(map).copyWith(items: items);
+
+        // ✅ Store ID doğrulaması
+        if (sale.storeId != storeId) {
+          print(
+              '⚠️ Sale ${sale.id} has mismatched store ID: ${sale.storeId} vs expected: $storeId');
+          continue; // Bu satışı atla
+        }
+
         sales.add(sale);
       }
 
+      print('📊 Loaded ${sales.length} sales for store: $storeId');
       return sales;
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ Error loading sales by store: $e');
       return [];
     }
   }

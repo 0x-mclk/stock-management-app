@@ -180,6 +180,13 @@ class ProductProvider extends ChangeNotifier {
       return;
     }
 
+    // ✅ Store ID doğrulaması
+    if (product.storeId != storeId) {
+      print(
+          '⚠️ Product ${product.id} belongs to different store: ${product.storeId} vs current: $storeId');
+      return; // Farklı mağazaya ait ürünü işleme
+    }
+
     final localProduct = await _dataService.getProductById(product.id!);
     if (localProduct == null) {
       // Product doesn't exist locally, add it
@@ -196,6 +203,13 @@ class ProductProvider extends ChangeNotifier {
   void _handleProductModified(Product product) async {
     final storeId = _currentStoreId ?? '';
     if (storeId.isEmpty) return;
+
+    // ✅ Store ID doğrulaması
+    if (product.storeId != storeId) {
+      print(
+          '⚠️ Modified product ${product.id} belongs to different store: ${product.storeId} vs current: $storeId');
+      return; // Farklı mağazaya ait ürünü işleme
+    }
 
     // Always update modified products
     await _dataService.saveProduct(product);

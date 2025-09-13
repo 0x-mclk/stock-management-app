@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum PaymentMethod {
   cash,
   creditCard,
@@ -49,18 +51,24 @@ class Sale {
   factory Sale.fromMap(Map<String, dynamic> map) {
     return Sale(
       id: map['id']?.toString(),
-      storeId: map['store_id'] ?? '', // ✅ Store ID eklendi
+      storeId: map['store_id'] ??
+          map['storeId'] ??
+          '', // ✅ Hem SQLite hem Firebase uyumlu
       supplierId: map['supplier_id']?.toString(),
-      totalAmount: (map['total_amount'] ?? 0).toDouble(),
+      totalAmount: (map['total_amount'] ?? map['totalAmount'] ?? 0).toDouble(),
       discount: (map['discount'] ?? 0).toDouble(),
-      finalAmount: (map['final_amount'] ?? 0).toDouble(),
+      finalAmount: (map['final_amount'] ?? map['finalAmount'] ?? 0).toDouble(),
       paymentMethod: PaymentMethod.values.firstWhere(
-        (e) => e.name == map['payment_method'],
+        (e) => e.name == (map['payment_method'] ?? map['paymentMethod']),
         orElse: () => PaymentMethod.cash,
       ),
       items: [], // Will be loaded separately
-      createdAt: DateTime.parse(map['created_at']),
-      isPrinted: (map['is_printed'] ?? 0) == 1,
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at'])
+          : (map['createdAt'] != null
+              ? (map['createdAt'] as Timestamp).toDate()
+              : DateTime.now()),
+      isPrinted: (map['is_printed'] ?? map['isPrinted'] ?? 0) == 1,
     );
   }
 

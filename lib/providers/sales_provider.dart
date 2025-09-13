@@ -148,13 +148,22 @@ class SalesProvider extends ChangeNotifier {
 
   Future<void> addSale(Sale sale) async {
     try {
-      // ✅ Store ID'sini otomatik ata
+      // ✅ Store ID'sini otomatik ata ve doğrula
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      final saleWithStore = sale.copyWith(storeId: storeId);
+      // ✅ Store ID'si boş olan satışlara store ID ata
+      final saleWithStore =
+          sale.storeId.isEmpty ? sale.copyWith(storeId: storeId) : sale;
+
+      // ✅ Store ID uyuşmazlığı kontrolü
+      if (saleWithStore.storeId != storeId) {
+        print(
+            '⚠️ Sale store ID mismatch: ${saleWithStore.storeId} vs current: $storeId');
+        throw Exception('Satış mağaza ID uyuşmazlığı');
+      }
 
       // // Debug print removed // Removed for production
       // // Debug print removed // Removed for production

@@ -101,51 +101,91 @@ class FirebaseSyncService {
 
   // Sync sales to Firebase
   Future<void> _syncSalesToFirebase() async {
-    final sales = await _dataService.loadSales();
+    // ✅ KRITIK DÜZELTME: Sadece current store'un sales'lerini yükle
+    final currentStoreId =
+        await StoreSelectionService.instance.getCurrentStoreId();
+    if (currentStoreId.isEmpty) {
+      print('❌ Cannot sync sales: No current store ID');
+      return;
+    }
+
+    // ✅ Store ID ile filtrelenmiş sales'leri yükle
+    final sales =
+        await _dataService.loadSalesByStore(currentStoreId, limit: null);
     final batch = _firestore.batch();
 
     final storeCollectionPath = await _getStoreCollectionPath('sales');
     final salesRef = _firestore.collection(storeCollectionPath);
 
-    print('🔄 Syncing ${sales.length} sales to: $storeCollectionPath');
+    print(
+        '🔄 Syncing ${sales.length} sales for store $currentStoreId to: $storeCollectionPath');
 
     for (final sale in sales) {
+      // ✅ Store ID doğrulaması
+      if (sale.storeId != currentStoreId) {
+        print(
+            '⚠️ Skipping sale ${sale.id} - wrong store ID: ${sale.storeId} vs $currentStoreId');
+        continue;
+      }
+
       final docRef = salesRef.doc(sale.id.toString());
       final saleData = {
         ...sale.toMap(),
         'updatedAt': FieldValue.serverTimestamp(),
         'localId': sale.id,
+        'storeId': currentStoreId, // ✅ Explicit store ID
       };
 
-      print('🔄 Syncing sale: ${sale.id} -> ${docRef.path}');
+      print(
+          '🔄 Syncing sale: ${sale.id} -> ${docRef.path} for store: $currentStoreId');
       batch.set(docRef, saleData);
     }
 
     await batch.commit();
-    print('✅ Sales sync completed');
+    print('✅ Sales sync completed for store: $currentStoreId');
   }
 
   // Sync suppliers to Firebase
   Future<void> _syncSuppliersToFirebase() async {
-    final suppliers = await _dataService.loadSuppliers();
+    // ✅ KRITIK DÜZELTME: Sadece current store'un suppliers'lerini yükle
+    final currentStoreId =
+        await StoreSelectionService.instance.getCurrentStoreId();
+    if (currentStoreId.isEmpty) {
+      print('❌ Cannot sync suppliers: No current store ID');
+      return;
+    }
+
+    // ✅ Store ID ile filtrelenmiş suppliers'leri yükle
+    final suppliers = await _dataService.loadSuppliersByStore(currentStoreId);
     final batch = _firestore.batch();
 
     final storeCollectionPath = await _getStoreCollectionPath('suppliers');
     final suppliersRef = _firestore.collection(storeCollectionPath);
 
-    print('🔄 Syncing ${suppliers.length} suppliers to: $storeCollectionPath');
+    print(
+        '🔄 Syncing ${suppliers.length} suppliers for store $currentStoreId to: $storeCollectionPath');
 
     for (final supplier in suppliers) {
+      // ✅ Store ID doğrulaması
+      if (supplier.storeId != currentStoreId) {
+        print(
+            '⚠️ Skipping supplier ${supplier.id} - wrong store ID: ${supplier.storeId} vs $currentStoreId');
+        continue;
+      }
+
       final docRef = suppliersRef.doc(supplier.id.toString());
-      batch.set(docRef, {
+      final supplierData = {
         ...supplier.toMap(),
         'updatedAt': FieldValue.serverTimestamp(),
         'localId': supplier.id,
-      });
+        'storeId': currentStoreId, // ✅ Explicit store ID
+      };
+
+      batch.set(docRef, supplierData);
     }
 
     await batch.commit();
-    print('✅ Suppliers sync completed');
+    print('✅ Suppliers sync completed for store: $currentStoreId');
   }
 
   // Sync from Firebase to local database
@@ -238,12 +278,40 @@ class FirebaseSyncService {
     print(
         '🔄 Syncing ${snapshot.docs.length} sales from: $storeCollectionPath');
 
+    // Get current store ID for validation
+    final currentStoreId =
+        await StoreSelectionService.instance.getCurrentStoreId();
+
+    if (currentStoreId.isEmpty) {
+      print('❌ Cannot sync sales from Firebase: No current store ID');
+      return;
+    }
+
+    int syncedCount = 0;
+    int skippedCount = 0;
+
     for (final doc in snapshot.docs) {
       final data = doc.data();
-      final sale = Sale.fromMap(data);
+      var sale = Sale.fromMap(data);
+
+      // ✅ Store ID validasyonu ve düzeltmesi
+      if (sale.storeId.isEmpty) {
+        print(
+            '⚠️ Sale without store ID, assigning current store: $currentStoreId');
+        sale = sale.copyWith(storeId: currentStoreId);
+      }
+
+      // ✅ KRITIK: Sadece current store'a ait sales'leri işle
+      if (sale.storeId != currentStoreId) {
+        print(
+            '⚠️ Skipping sale ${sale.id} from different store: ${sale.storeId} vs current: $currentStoreId');
+        skippedCount++;
+        continue;
+      }
 
       // Check if sale exists locally by checking if we have a sale with same timestamp and amount
-      final existingSales = await _dataService.loadSales();
+      final existingSales =
+          await _dataService.loadSalesByStore(currentStoreId, limit: null);
       final existingSale = existingSales
           .where((s) =>
               s.createdAt == sale.createdAt &&
@@ -251,13 +319,16 @@ class FirebaseSyncService {
           .firstOrNull;
 
       if (existingSale == null) {
-        // Add new sale
+        // Add new sale with validated store ID
         await _dataService.saveSale(sale);
-        print('➕ Added new sale: ${sale.id}');
+        print('➕ Added new sale: ${sale.id} for store: ${sale.storeId}');
+        syncedCount++;
       }
       // Sales usually don't get updated, so we don't need to check for updates
     }
-    print('✅ Sales sync from Firebase completed');
+
+    print(
+        '✅ Sales sync from Firebase completed - Synced: $syncedCount, Skipped: $skippedCount');
   }
 
   // Sync suppliers from Firebase
@@ -268,32 +339,65 @@ class FirebaseSyncService {
     print(
         '🔄 Syncing ${snapshot.docs.length} suppliers from: $storeCollectionPath');
 
+    // Get current store ID for validation
+    final currentStoreId =
+        await StoreSelectionService.instance.getCurrentStoreId();
+
+    if (currentStoreId.isEmpty) {
+      print('❌ Cannot sync suppliers from Firebase: No current store ID');
+      return;
+    }
+
+    int syncedCount = 0;
+    int skippedCount = 0;
+
     for (final doc in snapshot.docs) {
       final data = doc.data();
       final supplier = Supplier.fromMap(data);
 
+      // ✅ Store ID validasyonu
+      if (supplier.storeId.isNotEmpty && supplier.storeId != currentStoreId) {
+        print(
+            '⚠️ Skipping supplier ${supplier.id} from different store: ${supplier.storeId} vs current: $currentStoreId');
+        skippedCount++;
+        continue;
+      }
+
       // Check if supplier exists locally by name (assuming names are unique)
-      final existingSuppliers = await _dataService.loadSuppliers();
+      final existingSuppliers =
+          await _dataService.loadSuppliersByStore(currentStoreId);
       final existingSupplier =
           existingSuppliers.where((s) => s.name == supplier.name).firstOrNull;
 
       if (existingSupplier == null) {
-        // Add new supplier
-        await _dataService.saveSupplier(supplier);
-        print('➕ Added new supplier: ${supplier.name}');
+        // Add new supplier with validated store ID
+        final supplierWithStore = supplier.storeId.isEmpty
+            ? supplier.copyWith(storeId: currentStoreId)
+            : supplier;
+        await _dataService.saveSupplier(supplierWithStore);
+        print(
+            '➕ Added new supplier: ${supplierWithStore.name} for store: ${supplierWithStore.storeId}');
+        syncedCount++;
       } else {
         // Update existing supplier if Firebase version is newer
         final firebaseUpdatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
 
         if (firebaseUpdatedAt != null &&
             firebaseUpdatedAt.isAfter(existingSupplier.updatedAt)) {
-          await _dataService
-              .saveSupplier(supplier.copyWith(id: existingSupplier.id));
-          print('🔄 Updated supplier: ${supplier.name}');
+          final updatedSupplier = supplier.copyWith(
+            id: existingSupplier.id,
+            storeId: currentStoreId,
+          );
+          await _dataService.saveSupplier(updatedSupplier);
+          print(
+              '🔄 Updated supplier: ${updatedSupplier.name} for store: ${updatedSupplier.storeId}');
+          syncedCount++;
         }
       }
     }
-    print('✅ Suppliers sync from Firebase completed');
+
+    print(
+        '✅ Suppliers sync from Firebase completed - Synced: $syncedCount, Skipped: $skippedCount');
   }
 
   // Bidirectional sync (recommended)

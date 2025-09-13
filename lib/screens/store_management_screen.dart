@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../services/store_selection_service.dart';
+import '../services/real_time_service.dart';
 
 class StoreManagementScreen extends StatefulWidget {
   const StoreManagementScreen({super.key});
@@ -50,13 +54,108 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
     });
 
     try {
+      // CRITICAL: Doğru store ID'sini al (davet edilen kullanıcılar için önemli)
+      final storeId = await StoreSelectionService.instance.getCurrentStoreId();
+      final storeName =
+          await StoreSelectionService.instance.getCurrentStoreName();
+
+      print('🔍 Mağaza bilgileri yükleniyor:');
+      print('   Store ID: $storeId');
+      print('   Store Name: $storeName');
+
+      // StoreSelectionService cache durumunu kontrol et
+      print('🔍 StoreSelectionService debug:');
+      await StoreSelectionService.instance.initializeAfterLogin();
+      final finalStoreId =
+          await StoreSelectionService.instance.getCurrentStoreId();
+      final finalStoreName =
+          await StoreSelectionService.instance.getCurrentStoreName();
+      print('   Final Store ID: $finalStoreId');
+      print('   Final Store Name: $finalStoreName');
+
+      // Firebase'den mağaza bilgilerini al
+      final storeDoc = await FirebaseFirestore.instance
+          .collection('stores')
+          .doc(finalStoreId)
+          .get();
+
+      // YENI: User activity koleksiyonundan da mağaza adını kontrol et
+      final currentUser = FirebaseAuth.instance.currentUser;
+      String userActivityStoreName = '';
+      if (currentUser != null) {
+        try {
+          final userActivityDoc = await FirebaseFirestore.instance
+              .collection('user_activity')
+              .doc('${finalStoreId}_${currentUser.uid}')
+              .get();
+          if (userActivityDoc.exists) {
+            userActivityStoreName = userActivityDoc.data()?['storeName'] ?? '';
+            print(
+                '📊 User Activity\'den alınan mağaza adı: $userActivityStoreName');
+          }
+        } catch (e) {
+          print('⚠️ User activity\'den mağaza adı alınamadı: $e');
+        }
+      }
+
+      if (storeDoc.exists) {
+        final storeData = storeDoc.data()!;
+
+        print('✅ Mağaza verileri Firebase\'den alındı:');
+        print('   Mağaza Adı: ${storeData['name']}');
+        print('   Mağaza Adresi: ${storeData['address']}');
+        print('   Mağaza Telefonu: ${storeData['phone']}');
+
+        // Mağaza adı seçimi: user activity > store document > cached name
+        String displayStoreName = storeData['name'] ?? '';
+        if (userActivityStoreName.isNotEmpty) {
+          displayStoreName = userActivityStoreName;
+          print(
+              '🏆 User Activity\'den mağaza adı kullanılıyor: $displayStoreName');
+        } else if (displayStoreName.isEmpty) {
+          displayStoreName = finalStoreName;
+          print('💾 Cache\'den mağaza adı kullanılıyor: $displayStoreName');
+        }
+
+        // Form field'larını doldur
+        _storeNameController.text = displayStoreName;
+        _phoneController.text = storeData['phone'] ?? '';
+        _addressController.text = storeData['address'] ?? '';
+        _cityController.text = storeData['city'] ?? '';
+        _postalCodeController.text = storeData['postalCode'] ?? '';
+        _taxNumberController.text = storeData['taxNumber'] ?? '';
+        _descriptionController.text = storeData['description'] ?? '';
+        _emailController.text = storeData['email'] ?? '';
+
+        // Mağaza sahibinin adını al
+        final userName = await AuthService.instance.getUserName() ?? '';
+        _ownerNameController.text = userName;
+
+        print('✅ Mağaza bilgileri başarıyla yüklendi');
+        print('   Gösterilen Mağaza Adı: ${_storeNameController.text}');
+        print('   Store ID: $finalStoreId');
+      } else {
+        print('⚠️ Mağaza bilgileri bulunamadı: $finalStoreId');
+
+        // Varsayılan değerler - user activity\'den alınan adı kullan
+        String displayName = userActivityStoreName.isNotEmpty
+            ? userActivityStoreName
+            : finalStoreName;
+        _storeNameController.text = displayName;
+        final userName = await AuthService.instance.getUserName() ?? '';
+        _ownerNameController.text = userName;
+
+        print('💾 Varsayılan değerler kullanıldı - Mağaza Adı: $displayName');
+      }
+    } catch (e) {
+      print('❌ Mağaza bilgileri yüklenirken hata: $e');
+
+      // Fallback - eski metodu kullan
       final storeName = await AuthService.instance.getStoreName() ?? '';
       final userName = await AuthService.instance.getUserName() ?? '';
 
       _storeNameController.text = storeName;
       _ownerNameController.text = userName;
-    } catch (e) {
-      // Debug print removed
     } finally {
       setState(() {
         _isLoading = false;
@@ -169,6 +268,52 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
             Text(
               'Mağaza Bilgileri',
               style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+            // Store ID'yi göster (salt okunur)
+            FutureBuilder<String>(
+              future: StoreSelectionService.instance.getCurrentStoreId(),
+              builder: (context, snapshot) {
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.fingerprint, color: Colors.grey[600]),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Mağaza ID',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              snapshot.hasData
+                                  ? snapshot.data!
+                                  : 'Yükleniyor...',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             _buildTextField(
@@ -379,7 +524,3 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
     }
   }
 }
-
-
-
-

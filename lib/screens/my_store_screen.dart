@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/store_selection_service.dart';
 
 class MyStoreScreen extends StatefulWidget {
   const MyStoreScreen({super.key});
@@ -15,6 +16,7 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
   String _userEmail = '';
   String _userPhone = '';
   String _storeId = '';
+  String _storeName = ''; // Mağaza adı için yeni alan
   DateTime? _createdAt;
   DateTime? _lastLogin;
 
@@ -23,17 +25,50 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
   @override
   void initState() {
     super.initState();
+    print('🔥🔥🔥 MY STORE SCREEN BAŞLATILDI!');
     _loadStoreInfo();
   }
 
   Future<void> _loadStoreInfo() async {
+    print('🔥🔥🔥 MAĞAZAM BİLGİLERİ YÜKLENİYOR - BAŞLADI!');
+
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null) {
-        // Store ID hesapla
-        _storeId = 'store_${currentUser.uid}';
+        print('🔥 Current user: ${currentUser.email}');
+
+        // CRITICAL: Doğru store ID'yi al (davet edilen kullanıcılar için önemli)
+        _storeId = await StoreSelectionService.instance.getCurrentStoreId();
+        _storeName = await StoreSelectionService.instance.getCurrentStoreName();
         _userEmail = currentUser.email ?? '';
         _lastLogin = currentUser.metadata.lastSignInTime;
+
+        print('🏪 Store ID: $_storeId');
+        print('🏪 Store Name: $_storeName');
+
+        // User activity koleksiyonundan da mağaza adını kontrol et
+        String userActivityStoreName = '';
+        try {
+          final userActivityDoc = await FirebaseFirestore.instance
+              .collection('user_activity')
+              .doc('${_storeId}_${currentUser.uid}')
+              .get();
+          if (userActivityDoc.exists) {
+            userActivityStoreName = userActivityDoc.data()?['storeName'] ?? '';
+            print(
+                '📊 User Activity\'den alınan mağaza adı: $userActivityStoreName');
+          } else {
+            print('⚠️ User activity belgesi mevcut değil!');
+          }
+        } catch (e) {
+          print('⚠️ User activity\'den mağaza adı alınamadı: $e');
+        }
+
+        // Eğer user activity\'de mağaza adı varsa onu kullan
+        if (userActivityStoreName.isNotEmpty) {
+          _storeName = userActivityStoreName;
+          print('🏆 User Activity\'den mağaza adı kullanılıyor: $_storeName');
+        }
 
         // Firestore'dan kullanıcı bilgilerini al
         final userDoc = await FirebaseFirestore.instance
@@ -48,9 +83,15 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
             _userPhone = userData['phone'] ?? '';
             _createdAt = userData['createdAt']?.toDate();
           });
+
+          print('✅ Kullanıcı bilgileri yüklendi:');
+          print('   Ad: $_userName');
+          print('   Email: $_userEmail');
+          print('   Store: $_storeName ($_storeId)');
         }
       }
     } catch (e) {
+      print('❌ Mağaza bilgileri yüklenirken hata: $e');
       // Hata durumunda varsayılan değerler kullanılır
     } finally {
       setState(() {
@@ -139,7 +180,8 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            _buildInfoRow('Mağaza Adı', _userName),
+            _buildInfoRow(
+                'Mağaza Adı', _storeName.isNotEmpty ? _storeName : 'Mağaza'),
             _buildInfoRow('Store ID', _storeId),
             if (_createdAt != null)
               _buildInfoRow('Açılış Tarihi', _formatDate(_createdAt!)),

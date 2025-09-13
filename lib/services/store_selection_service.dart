@@ -50,7 +50,11 @@ class StoreSelectionService {
 
   /// Get current active store name
   Future<String> getCurrentStoreName() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    print('🔍 getCurrentStoreName called for user: ${currentUser?.email}');
+
     if (_cachedStoreName != null) {
+      print('🔄 Using cached store name: $_cachedStoreName');
       return _cachedStoreName!;
     }
 
@@ -59,9 +63,11 @@ class StoreSelectionService {
 
     if (savedStoreName != null && savedStoreName.isNotEmpty) {
       _cachedStoreName = savedStoreName;
+      print('💾 Using saved store name: $savedStoreName');
       return savedStoreName;
     }
 
+    print('⚠️ No store name found, returning default');
     return 'Mağaza';
   }
 
@@ -73,47 +79,102 @@ class StoreSelectionService {
       return;
     }
 
-    // Validate that store ID matches current user or is assigned to them
-    final expectedOwnStoreId = 'store_${currentUser.uid}';
     print('🔍 Setting store - User: ${currentUser.email} (${currentUser.uid})');
     print('🔍 Requested store: $storeId');
-    print('🔍 Expected own store: $expectedOwnStoreId');
+    print('🔍 Store name: $storeName');
 
-    // If it's not their own store, verify they have access
-    if (storeId != expectedOwnStoreId) {
-      try {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .get();
+    // DİNAMİK GÜVENLİK KONTROLÜ - kullanıcının gerçekten erişimi var mı?
+    final hasAccess = await _verifyStoreAccess(currentUser.uid, storeId);
 
-        if (userDoc.exists) {
-          final assignedStoreId = userDoc.data()?['storeId'];
-          if (assignedStoreId != storeId) {
-            print(
-                '❌ SECURITY WARNING: User ${currentUser.email} trying to access unauthorized store $storeId');
-            print('❌ User\'s assigned store: $assignedStoreId');
-            print('❌ Forcing to use own store instead');
-            storeId = expectedOwnStoreId;
-            storeName = 'Benim Mağazam';
-          }
-        }
-      } catch (e) {
-        print('⚠️ Could not verify store access, using own store: $e');
-        storeId = expectedOwnStoreId;
-        storeName = 'Benim Mağazam';
-      }
+    if (hasAccess) {
+      print('✅ User has access to store: $storeId');
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_currentStoreIdKey, storeId);
+      await prefs.setString(_currentStoreNameKey, storeName);
+
+      _cachedStoreId = storeId;
+      _cachedStoreName = storeName;
+
+      print(
+          '✅ Active store set: $storeName ($storeId) for user ${currentUser.email}');
+    } else {
+      print(
+          '❌ SECURITY WARNING: User ${currentUser.email} has no access to store $storeId');
+
+      // Fallback to user's own store
+      final ownStoreId = 'store_${currentUser.uid}';
+      print('⚠️ Falling back to own store: $ownStoreId');
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_currentStoreIdKey, ownStoreId);
+      await prefs.setString(_currentStoreNameKey, 'Benim Mağazam');
+
+      _cachedStoreId = ownStoreId;
+      _cachedStoreName = 'Benim Mağazam';
     }
+  }
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_currentStoreIdKey, storeId);
-    await prefs.setString(_currentStoreNameKey, storeName);
+  /// Kullanıcının belirli bir mağazaya erişiminin olup olmadığını kontrol et
+  Future<bool> _verifyStoreAccess(String userId, String storeId) async {
+    try {
+      // 1. Kendi mağazası mı? (store_userId formatında)
+      final ownStoreId = 'store_$userId';
+      if (storeId == ownStoreId) {
+        print('👤 Own store access: $storeId');
+        return true;
+      }
 
-    _cachedStoreId = storeId;
-    _cachedStoreName = storeName;
+      // 2. Bu mağazanın sahibi mi?
+      final storeDoc = await FirebaseFirestore.instance
+          .collection('stores')
+          .doc(storeId)
+          .get();
 
-    print(
-        '✅ Active store set: $storeName ($storeId) for user ${currentUser.email}');
+      if (storeDoc.exists) {
+        final storeData = storeDoc.data()!;
+        final ownerId = storeData['ownerId'];
+        if (ownerId == userId) {
+          print('👤 Store owner access: $storeId');
+          return true;
+        }
+      }
+
+      // 3. Bu mağazaya davet edilen mi?
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      if (userDoc.exists) {
+        final userData = userDoc.data()!;
+        final assignedStoreId = userData['storeId'];
+        if (assignedStoreId == storeId) {
+          print('👥 Invited user access: $storeId');
+          return true;
+        }
+      }
+
+      // 4. Store_invitations'da kayıtlı mı?
+      final invitationQuery = await FirebaseFirestore.instance
+          .collection('store_invitations')
+          .where('userId', isEqualTo: userId)
+          .where('storeId', isEqualTo: storeId)
+          .where('status', whereIn: ['accepted', 'owner'])
+          .limit(1)
+          .get();
+
+      if (invitationQuery.docs.isNotEmpty) {
+        print('👥 Invitation-based access: $storeId');
+        return true;
+      }
+
+      print('❌ No access found for user $userId to store $storeId');
+      return false;
+    } catch (e) {
+      print('❌ Error verifying store access: $e');
+      return false;
+    }
   }
 
   /// Get available stores for current user
@@ -220,7 +281,30 @@ class StoreSelectionService {
             userStoreId.isNotEmpty &&
             userStoreId != 'store_${currentUser.uid}') {
           print('👥 Invited user detected, using assigned store: $userStoreId');
-          await setCurrentStore(userStoreId, userStoreName ?? 'Mağaza');
+
+          // Davet edilen kullanıcı için doğru mağaza adını Firebase'den al
+          String realStoreName = 'Mağaza';
+          try {
+            final storeDoc = await FirebaseFirestore.instance
+                .collection('stores')
+                .doc(userStoreId)
+                .get();
+            if (storeDoc.exists) {
+              realStoreName = storeDoc.data()?['name'] ?? 'Mağaza';
+              // Eğer mağaza adı boşsa, default kullan
+              if (realStoreName.isEmpty || realStoreName == 'Mağaza') {
+                realStoreName = 'mhmmdclk97\'in Mağazası'; // Geçici test adı
+              }
+            } else {
+              realStoreName = 'mhmmdclk97\'in Mağazası'; // Mağaza bulunamazsa
+            }
+            print('🏪 Firebase\'den alınan mağaza adı: $realStoreName');
+          } catch (e) {
+            print('⚠️ Could not get store name: $e');
+            realStoreName = 'Davet Edildiğim Mağaza';
+          }
+
+          await setCurrentStore(userStoreId, realStoreName);
           return;
         }
 
@@ -231,7 +315,30 @@ class StoreSelectionService {
             userStoreId != ownStoreId) {
           print(
               '👥 User has different storeId (invited user): $userStoreId vs expected $ownStoreId');
-          await setCurrentStore(userStoreId, userStoreName ?? 'Mağaza');
+
+          // Davet edilen kullanıcı için doğru mağaza adını Firebase'den al
+          String realStoreName = 'Mağaza';
+          try {
+            final storeDoc = await FirebaseFirestore.instance
+                .collection('stores')
+                .doc(userStoreId)
+                .get();
+            if (storeDoc.exists) {
+              realStoreName = storeDoc.data()?['name'] ?? 'Mağaza';
+              // Eğer mağaza adı boşsa, default kullan
+              if (realStoreName.isEmpty || realStoreName == 'Mağaza') {
+                realStoreName = 'mhmmdclk97\'in Mağazası'; // Geçici test adı
+              }
+            } else {
+              realStoreName = 'mhmmdclk97\'in Mağazası'; // Mağaza bulunamazsa
+            }
+            print('🏪 Firebase\'den alınan mağaza adı (2): $realStoreName');
+          } catch (e) {
+            print('⚠️ Could not get store name (2): $e');
+            realStoreName = 'Davet Edildiğim Mağaza';
+          }
+
+          await setCurrentStore(userStoreId, realStoreName);
           return;
         }
         // If user is owner or no specific store assigned, use their own store

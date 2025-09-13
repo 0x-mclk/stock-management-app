@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import '../services/real_time_service.dart';
 import '../services/invitation_service.dart';
 import '../models/invitation_model.dart';
@@ -32,10 +34,29 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
   }
 
   void _updateUserActivity() async {
+    // Doğru mağaza adını al
+    String storeName = 'Mağaza';
+    try {
+      final storeDoc = await FirebaseFirestore.instance
+          .collection('stores')
+          .doc(widget.storeId)
+          .get();
+      if (storeDoc.exists) {
+        storeName = storeDoc.data()?['name'] ?? 'Mağaza';
+        if (storeName.isEmpty) {
+          storeName = 'Mağaza';
+        }
+      }
+      print('🏪 _updateUserActivity için kullanılacak mağaza adı: $storeName');
+    } catch (e) {
+      print('⚠️ _updateUserActivity de mağaza adı alınamadı: $e');
+    }
+
     // Mevcut kullanıcının aktivitesini güncelle
     await _realTimeService.updateUserActivity(
       storeId: widget.storeId,
       userId: widget.currentUserId,
+      storeName: storeName, // Doğru mağaza adını gönder
     );
 
     // Mağaza sahibi kaydının var olduğundan emin ol
@@ -60,35 +81,108 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
       print('📧 Mevcut kullanıcı email: $currentUserEmail');
       print('🏪 Mevcut store ID: ${widget.storeId}');
 
-      // CRITICAL: Sadece kendi mağazasında olan kullanıcılar için owner kaydı oluştur
-      // Davet edilen kullanıcılar için ASLA owner kaydı oluşturma!
-      final expectedOwnStoreId = 'store_$currentUserId';
+      // DİNAMİK KONTROL: Bu kullanıcı bu mağazanın gerçek sahibi mi?
+      final isStoreOwner =
+          await _checkIfUserIsStoreOwner(widget.storeId, currentUserId);
 
-      if (widget.storeId != expectedOwnStoreId) {
+      if (isStoreOwner) {
+        print(
+            '✅ Bu kullanıcı bu mağazanın sahibi - Owner kayıtları oluşturulacak');
+
+        // Mağaza sahibi kaydını temizle ve doğruyu ekle
+        await _invitationService.ensureStoreOwnerExistsWithCleanup(
+          storeId: widget.storeId,
+          userId: widget.currentUserId,
+          email: currentUserEmail,
+        );
+
+        // CRITICAL: Mağaza sahibinin members koleksiyonunda da bulunduğundan emin ol
+        await _ensureOwnerInMembersCollection(currentUserEmail, currentUserId);
+
+        // User activity kayıtlarını da temizle
+        await _realTimeService.cleanupIncorrectUserActivities(
+          storeId: widget.storeId,
+          correctUserId: widget.currentUserId,
+          correctEmail: currentUserEmail,
+        );
+      } else {
         print('🚫 Bu kullanıcı ($currentUserEmail) bu mağazanın sahibi değil.');
-        print('   Mevcut store: ${widget.storeId}');
-        print('   Beklenen kendi store: $expectedOwnStoreId');
-        print('   Owner kaydı oluşturulmayacak - bu kullanıcı davetli.');
-        return;
+        print('   Bu kullanıcı muhtemelen davetli üye.');
+        print('   Owner kaydı oluşturulmayacak.');
       }
-
-      print('✅ Bu kullanıcı kendi mağazasında - Owner kaydı oluşturulacak');
-
-      // Sadece kendi mağazası için mağaza sahibi kaydını temizle ve doğruyu ekle
-      await _invitationService.ensureStoreOwnerExistsWithCleanup(
-        storeId: widget.storeId,
-        userId: widget.currentUserId,
-        email: currentUserEmail,
-      );
-
-      // User activity kayıtlarını da temizle
-      await _realTimeService.cleanupIncorrectUserActivities(
-        storeId: widget.storeId,
-        correctUserId: widget.currentUserId,
-        correctEmail: currentUserEmail,
-      );
     } catch (e) {
       print('❌ Mağaza sahibi kaydı oluşturulamadı: $e');
+    }
+  }
+
+  /// Mağaza sahibinin members koleksiyonunda bulunduğundan emin ol
+  Future<void> _ensureOwnerInMembersCollection(
+      String email, String userId) async {
+    try {
+      print(
+          '🔍 Mağaza sahibinin members koleksiyonundaki kaydı kontrol ediliyor...');
+
+      // Mevcut member kaydını kontrol et
+      final memberDoc = await FirebaseFirestore.instance
+          .collection('stores')
+          .doc(widget.storeId)
+          .collection('members')
+          .doc(userId)
+          .get();
+
+      if (!memberDoc.exists) {
+        print(
+            '⚠️ Mağaza sahibi members koleksiyonunda bulunamadı! Ekleniyor...');
+
+        // Firebase Auth'tan kullanıcı adını al
+        final currentUser = FirebaseAuth.instance.currentUser;
+        final userName = currentUser?.displayName ?? email.split('@')[0];
+
+        // Member kaydını ekle
+        await FirebaseFirestore.instance
+            .collection('stores')
+            .doc(widget.storeId)
+            .collection('members')
+            .doc(userId)
+            .set({
+          'email': email,
+          'name': userName,
+          'role': 'owner',
+          'status': 'owner',
+          'userId': userId,
+          'joinedAt': FieldValue.serverTimestamp(),
+          'isActive': true,
+        });
+
+        print('✅ Mağaza sahibi members koleksiyonuna başarıyla eklendi!');
+      } else {
+        print('✅ Mağaza sahibi zaten members koleksiyonunda mevcut.');
+
+        // Mevcut kaydı güncelle (eksik alanları doldur)
+        final memberData = memberDoc.data()!;
+        final updates = <String, dynamic>{};
+
+        if (memberData['role'] != 'owner') {
+          updates['role'] = 'owner';
+        }
+        if (memberData['status'] != 'owner') {
+          updates['status'] = 'owner';
+        }
+        if (memberData['isActive'] != true) {
+          updates['isActive'] = true;
+        }
+        if (memberData['userId'] != userId) {
+          updates['userId'] = userId;
+        }
+
+        if (updates.isNotEmpty) {
+          await memberDoc.reference.update(updates);
+          print(
+              '✅ Mağaza sahibi member kaydı güncellendi: ${updates.keys.join(", ")}');
+        }
+      }
+    } catch (e) {
+      print('❌ Mağaza sahibi member kaydı kontrolü hatası: $e');
     }
   }
 
@@ -119,6 +213,24 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
 
       print('🟢 Aktif üye sayısı: ${activeMembers.length}/${members.length}');
 
+      // Doğru mağaza adını al
+      String storeName = 'Mağaza';
+      try {
+        final storeDoc = await FirebaseFirestore.instance
+            .collection('stores')
+            .doc(widget.storeId)
+            .get();
+        if (storeDoc.exists) {
+          storeName = storeDoc.data()?['name'] ?? 'Mağaza';
+          if (storeName.isEmpty) {
+            storeName = 'Mağaza';
+          }
+        }
+        print('🏪 User activity için kullanılacak mağaza adı: $storeName');
+      } catch (e) {
+        print('⚠️ Mağaza adı alınamadı: $e');
+      }
+
       // Batch update için kullanıcı listesi hazırla
       final usersForBatchUpdate = activeMembers
           .where((member) => member.userId != null && member.userId!.isNotEmpty)
@@ -137,11 +249,12 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
         await _realTimeService.batchUpdateUserActivity(
           storeId: widget.storeId,
           users: usersForBatchUpdate,
+          storeName: storeName, // Doğru mağaza adını gönder
         );
       }
 
       print(
-          '🔄 Tüm store üyelerinin aktivite bilgileri senkronize edildi (${usersForBatchUpdate.length} üye)');
+          '🔄 Tüm store üyelerinin aktivite bilgileri senkronize edildi (${usersForBatchUpdate.length} üye) - Mağaza adı: $storeName');
     } catch (e) {
       print('❌ Üye aktivite senkronizasyon hatası: $e');
     }
@@ -931,6 +1044,39 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
       return '${difference.inMinutes} dakika önce';
     } else {
       return 'Az önce';
+    }
+  }
+
+  /// Kullanıcının mağaza sahibi olup olmadığını dinamik olarak kontrol et
+  Future<bool> _checkIfUserIsStoreOwner(String storeId, String userId) async {
+    try {
+      // Stores koleksiyonundaki mağaza bilgisini kontrol et
+      final storeDoc = await FirebaseFirestore.instance
+          .collection('stores')
+          .doc(storeId)
+          .get();
+
+      if (!storeDoc.exists) {
+        print('⚠️ Mağaza bulunamadı: $storeId');
+        return false;
+      }
+
+      final storeData = storeDoc.data()!;
+      final ownerId = storeData['ownerId'];
+
+      print('🔍 Mağaza sahibi kontrolü:');
+      print('   Store ID: $storeId');
+      print('   Expected Owner ID: $ownerId');
+      print('   Current User ID: $userId');
+
+      // Eğer bu kullanıcı mağazanın ownerId'si ile eşleşiyorsa, owner'dır
+      final isOwner = (ownerId == userId);
+      print('   Sonuç: ${isOwner ? "OWNER" : "NOT OWNER"}');
+
+      return isOwner;
+    } catch (e) {
+      print('❌ Store owner kontrolü hatası: $e');
+      return false;
     }
   }
 }

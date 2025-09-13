@@ -45,7 +45,7 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
     await _synchronizeAllMembersActivity();
   }
 
-  /// Mağaza sahibi kaydının var olduğundan emin ol
+  /// Mağaza sahibi kaydının var olduğundan emin ol (SADECE gerçek sahipler için)
   Future<void> _ensureStoreOwnerExists() async {
     try {
       // Firebase Auth'dan mevcut kullanıcının gerçek email'ini al
@@ -56,10 +56,25 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
       }
 
       final currentUserEmail = currentUser.email!;
+      final currentUserId = currentUser.uid;
       print('📧 Mevcut kullanıcı email: $currentUserEmail');
       print('🏪 Mevcut store ID: ${widget.storeId}');
 
-      // Mağaza sahibi kaydını temizle ve doğruyu ekle
+      // CRITICAL: Sadece kendi mağazasında olan kullanıcılar için owner kaydı oluştur
+      // Davet edilen kullanıcılar için ASLA owner kaydı oluşturma!
+      final expectedOwnStoreId = 'store_$currentUserId';
+
+      if (widget.storeId != expectedOwnStoreId) {
+        print('🚫 Bu kullanıcı ($currentUserEmail) bu mağazanın sahibi değil.');
+        print('   Mevcut store: ${widget.storeId}');
+        print('   Beklenen kendi store: $expectedOwnStoreId');
+        print('   Owner kaydı oluşturulmayacak - bu kullanıcı davetli.');
+        return;
+      }
+
+      print('✅ Bu kullanıcı kendi mağazasında - Owner kaydı oluşturulacak');
+
+      // Sadece kendi mağazası için mağaza sahibi kaydını temizle ve doğruyu ekle
       await _invitationService.ensureStoreOwnerExistsWithCleanup(
         storeId: widget.storeId,
         userId: widget.currentUserId,

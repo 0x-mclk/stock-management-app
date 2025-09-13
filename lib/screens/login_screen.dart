@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // ✅ Beni hatırla için
@@ -91,89 +92,29 @@ class _LoginScreenState extends State<LoginScreen>
 
       print('🔵 Registering user: $email');
 
-      // Login.md ADIM 3C: Davet kontrolü
+      // Login.md ADIM 3C: Anonymous auth ile davet kontrolü
+      print('🔍 Starting anonymous auth for invitation check...');
+      await FirebaseAuth.instance.signInAnonymously();
+      print('✅ Anonymous auth successful, checking invitations...');
+
       final invitation = await _checkInvitation(email);
 
-      if (invitation != null) {
-        print('🟢 Found invitation for: $email');
-        // SENARYO A: Davetli kullanıcı
-        await _handleInvitedUserRegistration(
-            email, password, name, phone, invitation);
-      } else {
-        print('🟡 No invitation found for: $email - Normal user registration');
-        // SENARYO B: Normal kullanıcı (yeni mağaza sahibi)
-        await _handleNormalUserRegistration(email, password, name, phone);
-      }
+      // Anonymous kullanıcıyı çıkar
+      await FirebaseAuth.instance.signOut();
+      print('📝 Anonymous user signed out');
 
-      print('✅ Registration completed successfully');
-    } catch (e) {
-      print('❌ Registration error: $e');
-      _showError('Kayıt hatası: ${e.toString()}');
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  // Login.md ADIM 3C: Davet kontrol sistemi
-  Future<Map<String, dynamic>?> _checkInvitation(String email) async {
-    try {
-      print('🔍 Checking invitations for: $email');
-
-      // ✅ Pending VE accepted invitations için kontrol (Firebase Console compatibility)
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('store_invitations')
-          .where('email', isEqualTo: email)
-          .where('status',
-              whereIn: ['pending', 'accepted']) // ✅ Both status kontrolü
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        final invitation = querySnapshot.docs.first.data();
-        final status = invitation['status'];
-        print(
-            '✅ Invitation found for: $email - Status: $status - Store: ${invitation['storeId']}');
-        return invitation;
-      }
-
-      print('🟡 No invitation found for: $email');
-      return null;
-    } catch (e) {
-      print('❌ Invitation check error: $e');
-      // Hata durumunda null döndür - Normal kayıt devam etsin
-      return null;
-    }
-  }
-
-  // Login.md SENARYO A: Davetli kullanıcı kayıt işlemi
-  Future<void> _handleInvitedUserRegistration(String email, String password,
-      String name, String phone, Map<String, dynamic> invitation) async {
-    try {
-      print('🔵 Starting invited user registration for: $email');
-
-      final storeId = invitation['storeId'];
-      final role = invitation['role'] ?? 'staff';
-
-      // 1. Önce mevcut kullanıcı kontrolü
-      UserCredential? userCredential;
-      User? user;
-      String userId;
-
+      // Şimdi gerçek Firebase Auth hesap oluştur
+      UserCredential tempUserCredential;
       try {
-        // A. Yeni hesap oluşturmayı dene
-        userCredential = await FirebaseAuth.instance
+        tempUserCredential = await FirebaseAuth.instance
             .createUserWithEmailAndPassword(email: email, password: password);
-        user = userCredential.user;
-        print('✅ New Firebase Auth account created');
+        print('✅ Real Firebase Auth account created');
       } catch (authError) {
         if (authError.toString().contains('email-already-in-use')) {
-          print('🟡 Email already exists, trying to sign in...');
-
-          // B. Hesap zaten varsa giriş yap
+          print('🟡 Email already exists, signing in...');
           try {
-            userCredential = await FirebaseAuth.instance
+            tempUserCredential = await FirebaseAuth.instance
                 .signInWithEmailAndPassword(email: email, password: password);
-            user = userCredential.user;
             print('✅ Signed in with existing account');
           } catch (signInError) {
             print('❌ Sign in failed: $signInError');
@@ -186,31 +127,127 @@ class _LoginScreenState extends State<LoginScreen>
         }
       }
 
-      if (user == null) {
-        print('❌ User is null after auth');
-        throw Exception('Authentication failed - null user');
+      if (invitation != null) {
+        print('🟢 Found invitation for: $email');
+        // SENARYO A: Davetli kullanıcı
+        await _handleInvitedUserRegistration(
+            email, password, name, phone, invitation, tempUserCredential);
+      } else {
+        print('🟡 No invitation found for: $email - Normal user registration');
+        // SENARYO B: Normal kullanıcı (yeni mağaza sahibi)
+        await _handleNormalUserRegistration(
+            email, password, name, phone, tempUserCredential);
       }
 
-      userId = user.uid;
-      print('✅ User authenticated with UID: $userId');
+      print('✅ Registration completed successfully');
+    } catch (e) {
+      print('❌ Registration error: $e');
+      print('❌ Full error stack trace: ${e.toString()}');
+      if (e.toString().contains('email-already-in-use')) {
+        _showError(
+            'Bu e-posta adresi zaten kayıtlı. Lütfen giriş yapmayı deneyin.');
+      } else {
+        _showError('Kayıt hatası: ${e.toString()}');
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
-      // CRITICAL: Initialize store selection with proper cache clearing for invited users
-      await StoreSelectionService.instance.initializeAfterLogin();
+  // Login.md ADIM 3C: Davet kontrol sistemi
+  Future<Map<String, dynamic>?> _checkInvitation(String email) async {
+    try {
+      print('🔍 Checking invitations for: $email');
 
-      print('🔵 Saving/updating user data to Firestore...');
-      // 2. User bilgilerini kaydet/güncelle
+      // ✅ ÖNCELİKLE TÜM DAVETLERİ KONTROL ET (debug için)
+      final allInvitations = await FirebaseFirestore.instance
+          .collection('store_invitations')
+          .where('email', isEqualTo: email)
+          .get();
+
+      print(
+          '📋 Total invitations found for $email: ${allInvitations.docs.length}');
+      for (var doc in allInvitations.docs) {
+        final data = doc.data();
+        print(
+            '   - Invitation ID: ${doc.id}, Status: ${data['status']}, Store: ${data['storeId']}');
+      }
+
+      // ✅ SADECE accepted invitations için kontrol (Senaryoda belirtildiği gibi)
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('store_invitations')
+          .where('email', isEqualTo: email)
+          .where('status',
+              whereIn: ['accepted', 'pending']) // ✅ ACCEPTED VE PENDING!
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        final invitation = querySnapshot.docs.first.data();
+        final status = invitation['status'];
+        print(
+            '✅ Invitation found for: $email - Status: $status - Store: ${invitation['storeId']}');
+        return invitation;
+      }
+
+      print('🟡 No accepted invitation found for: $email');
+      return null;
+    } catch (e) {
+      print('❌ Invitation check error: $e');
+      // Hata durumunda null döndür - Normal kayıt devam etsin
+      return null;
+    }
+  }
+
+  // Login.md SENARYO A: Davetli kullanıcı kayıt işlemi
+  Future<void> _handleInvitedUserRegistration(
+      String email,
+      String password,
+      String name,
+      String phone,
+      Map<String, dynamic> invitation,
+      UserCredential userCredential) async {
+    try {
+      print('🔵 Starting invited user registration for: $email');
+
+      final storeId = invitation['storeId'];
+      final role = invitation['role'] ?? 'staff';
+
+      // Kullanıcı zaten authenticated
+      final user = userCredential.user;
+      if (user == null) {
+        throw Exception('User creation failed - null user');
+      }
+
+      final userId = user.uid;
+      print(
+          '✅ User authenticated with UID: $userId - Will join store: $storeId');
+
+      // CRITICAL: Clear store cache first for invited users
+      await StoreSelectionService.instance.clearCache();
+      print('🗑️ Store cache cleared for invited user');
+
+      print('🔵 Saving user data to existing store: $storeId...');
+      // 2. User bilgilerini DAVET EDİLEN STORE ID ile kaydet
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
         'email': email,
         'name': name,
         'phone': phone,
         'role': role,
-        'storeId': storeId, // Davet edilen mağaza
+        'storeId': storeId, // ← DAVET EDİLEN STORE ID (değişmeyecek!)
+        'storeName': 'Davet Edildiğim Mağaza', // Geçici isim
         'createdAt': FieldValue.serverTimestamp(),
         'isActive': true,
-      }, SetOptions(merge: true)); // ✅ Merge ile mevcut verileri korur
+      });
+      print('✅ User document created with storeId: $storeId');
 
-      print('🔵 Adding user to store members...');
-      // 3. Mağaza üyelerine ekle
+      // CRITICAL: Set correct store AFTER user document is created
+      await StoreSelectionService.instance
+          .setCurrentStore(storeId, 'Davet Edildiğim Mağaza');
+      print('✅ Davetli kullanıcı için doğru store ID ayarlandı: $storeId');
+
+      print('🔵 Adding user to existing store members...');
+      // 3. Mevcut mağazaya üye olarak ekle (YENİ STORE OLUŞTURMA!)
       await FirebaseFirestore.instance
           .collection('stores')
           .doc(storeId)
@@ -223,44 +260,107 @@ class _LoginScreenState extends State<LoginScreen>
         'status': 'accepted',
         'userId': userId,
         'joinedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)); // ✅ Merge ile mevcut verileri korur
+      });
 
-      print('🔵 Updating invitation status...');
-      // 4. ✅ Davet durumunu 'accepted' yap ve invitation ID'yi bul
+      print('🔵 Updating invitation status to accepted...');
+      // 4. ✅ Davet durumunu 'accepted' yap ve kullanıcı ID'yi ekle - OWNER KAYDI OLUŞTURMA!
       try {
         final invitationQuery = await FirebaseFirestore.instance
             .collection('store_invitations')
             .where('email', isEqualTo: email)
-            .where('status', isEqualTo: 'pending')
+            .where('storeId', isEqualTo: storeId)
+            .where('status', isEqualTo: 'accepted')
             .limit(1)
             .get();
 
         if (invitationQuery.docs.isNotEmpty) {
           final invitationDoc = invitationQuery.docs.first;
           await invitationDoc.reference.update({
-            'status': 'accepted',
-            'acceptedAt': FieldValue.serverTimestamp(),
-            'userId': userId,
+            'userId': userId, // Kullanıcı ID'yi ekle
+            'respondedAt': FieldValue.serverTimestamp(),
+            'lastActivity': FieldValue.serverTimestamp(),
+            'joinedAt': FieldValue.serverTimestamp(), // Katılma tarihini ekle
           });
-          print('✅ Invitation status updated to accepted');
+          print('✅ Existing invitation updated with userId: $userId');
+        } else {
+          // Eğer accepted invitation bulunamazsa, pending olanı bul ve güncelle
+          final pendingQuery = await FirebaseFirestore.instance
+              .collection('store_invitations')
+              .where('email', isEqualTo: email)
+              .where('storeId', isEqualTo: storeId)
+              .where('status', isEqualTo: 'pending')
+              .limit(1)
+              .get();
+
+          if (pendingQuery.docs.isNotEmpty) {
+            final invitationDoc = pendingQuery.docs.first;
+            await invitationDoc.reference.update({
+              'userId': userId,
+              'status': 'accepted',
+              'respondedAt': FieldValue.serverTimestamp(),
+              'lastActivity': FieldValue.serverTimestamp(),
+              'joinedAt': FieldValue.serverTimestamp(),
+            });
+            print(
+                '✅ Pending invitation updated to accepted with userId: $userId');
+          }
         }
       } catch (invitationError) {
-        print('⚠️ Could not update invitation status: $invitationError');
+        print('⚠️ Could not update invitation: $invitationError');
         // Devam et - kullanıcı kayıdı başarılı
+      }
+
+      // CRITICAL: Davet edilen kullanıcı için ASLA owner kaydı oluşturma!
+      print('🔍 Cleaning up any duplicate owner records for invited user...');
+      try {
+        // Davet edilen kullanıcı için yanlış owner kayıtlarını temizle
+        final duplicateOwnerQuery = await FirebaseFirestore.instance
+            .collection('store_invitations')
+            .where('email', isEqualTo: email)
+            .where('storeId', isEqualTo: storeId)
+            .where('status', isEqualTo: 'owner')
+            .get();
+
+        for (var doc in duplicateOwnerQuery.docs) {
+          await doc.reference.delete();
+          print('🗑️ Deleted duplicate owner record for: $email');
+        }
+
+        if (duplicateOwnerQuery.docs.isNotEmpty) {
+          print(
+              '✅ Cleaned up ${duplicateOwnerQuery.docs.length} duplicate owner records');
+        }
+
+        // Aynı şekilde yanlış user activity kayıtlarını da temizle
+        final wrongUserActivityQuery = await FirebaseFirestore.instance
+            .collection('user_activity')
+            .where('email', isEqualTo: email)
+            .where('storeId', isEqualTo: storeId)
+            .where('userId',
+                isNotEqualTo: userId) // Yanlış userId'ye sahip kayıtlar
+            .get();
+
+        for (var doc in wrongUserActivityQuery.docs) {
+          await doc.reference.delete();
+          print('🗑️ Deleted wrong user activity record for: $email');
+        }
+      } catch (cleanupError) {
+        print('⚠️ Error cleaning duplicate owner records: $cleanupError');
       }
 
       print('✅ Invited user registration completed successfully');
 
       // 4. Provider'ları güncelle ve yönlendir
       if (mounted) {
-        print('🔵 Navigating to dashboard...');
-        // 5. Direkt dashboard'a git - Artık mağaza sahibi ile birlikte çalışıyor!
+        print(
+            '🔵 Davetli kullanici mevcut magazaya katildi - Dashboard\'a yonlendiriliyor...');
+        // 5. Direkt dashboard'a git - Mağaza kurma sayfasına GİTME!
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const MainScreen()),
         );
 
-        _showSuccess('Hoş geldiniz! Mağaza takımına katıldınız.');
+        _showSuccess('Hos geldiniz! Davet edildiginiz magazaya katildiniz.');
       }
     } catch (e) {
       print('❌ Invited user registration error: $e');
@@ -269,25 +369,14 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   // Login.md SENARYO B: Normal kullanıcı kayıt işlemi
-  Future<void> _handleNormalUserRegistration(
-      String email, String password, String name, String phone) async {
+  Future<void> _handleNormalUserRegistration(String email, String password,
+      String name, String phone, UserCredential userCredential) async {
     try {
       print('🔵 Starting normal user registration for: $email');
 
-      // 1. Firebase Authentication hesap oluştur - Güvenli wrapper
-      UserCredential? userCredential;
-      try {
-        userCredential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(email: email, password: password);
-        print('✅ Firebase Auth successful for normal user');
-      } catch (authError) {
-        print('❌ Firebase Auth error: $authError');
-        throw authError;
-      }
-
+      // Kullanıcı zaten authenticated
       final user = userCredential.user;
       if (user == null) {
-        print('❌ User is null after creation');
         throw Exception('User creation failed - null user');
       }
 
@@ -299,19 +388,19 @@ class _LoginScreenState extends State<LoginScreen>
       await StoreSelectionService.instance.initializeAfterLogin();
 
       print('🔵 Saving normal user data to Firestore...');
-      // 2. User bilgilerini kaydet
+      // 2. User bilgilerini kaydet (Senaryo B formatında)
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
         'email': email,
         'name': name,
         'phone': phone,
         'role': 'owner',
-        // storeId field removed - owner users use their own store_${uid}
+        'storeId': storeId, // ← YENİ mağaza ID'si: store_userId
         'createdAt': FieldValue.serverTimestamp(),
         'isActive': true,
       });
 
       print('🔵 Creating new store...');
-      // 3. YENİ mağaza oluştur
+      // 3. YENİ mağaza oluştur (Senaryo B formatında)
       await FirebaseFirestore.instance.collection('stores').doc(storeId).set({
         'ownerId': userId,
         'name': '', // Boş - kullanıcı dolduracak
@@ -322,7 +411,7 @@ class _LoginScreenState extends State<LoginScreen>
       });
 
       print('🔵 Adding owner to store members...');
-      // 4. Kendini mağaza sahibi olarak ekle
+      // 4. Kendini mağaza sahibi olarak ekle (Senaryo B formatında)
       await FirebaseFirestore.instance
           .collection('stores')
           .doc(storeId)
@@ -335,6 +424,32 @@ class _LoginScreenState extends State<LoginScreen>
         'status': 'owner',
         'userId': userId,
         'joinedAt': FieldValue.serverTimestamp(),
+      });
+
+      print('🔵 Adding owner to store_invitations for team management...');
+      // 5. store_invitations'a da owner kaydı ekle (takım yönetimi için)
+      await FirebaseFirestore.instance.collection('store_invitations').add({
+        'email': email,
+        'name': name,
+        'userId': userId,
+        'storeId': storeId,
+        'role': 'owner',
+        'status': 'owner',
+        'invitedAt': FieldValue.serverTimestamp(),
+        'joinedAt': FieldValue.serverTimestamp(),
+        'invitedBy': userId, // Owner invites themselves
+        'permissions': [
+          'read',
+          'write',
+          'delete',
+          'admin',
+          'invite',
+          'manage_users'
+        ],
+        'emailSent': false,
+        'adminApprovalRequired': false,
+        'isActive': true,
+        'lastActivity': FieldValue.serverTimestamp(),
       });
 
       print('✅ Normal user registration completed successfully');

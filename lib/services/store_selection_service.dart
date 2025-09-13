@@ -217,14 +217,24 @@ class StoreSelectionService {
         // If user is invited (has role other than owner), use the assigned store
         if (userRole != 'owner' &&
             userStoreId != null &&
-            userStoreId.isNotEmpty) {
+            userStoreId.isNotEmpty &&
+            userStoreId != 'store_${currentUser.uid}') {
           print('👥 Invited user detected, using assigned store: $userStoreId');
           await setCurrentStore(userStoreId, userStoreName ?? 'Mağaza');
           return;
         }
 
-        // If user is owner or no specific store assigned, use their own store
+        // If user's assigned storeId is different from their own store, they are invited
         final ownStoreId = 'store_${currentUser.uid}';
+        if (userStoreId != null &&
+            userStoreId.isNotEmpty &&
+            userStoreId != ownStoreId) {
+          print(
+              '👥 User has different storeId (invited user): $userStoreId vs expected $ownStoreId');
+          await setCurrentStore(userStoreId, userStoreName ?? 'Mağaza');
+          return;
+        }
+        // If user is owner or no specific store assigned, use their own store
         print('👤 Owner/Regular user detected, using own store: $ownStoreId');
         print('   Current user UID: ${currentUser.uid}');
         print('   User role: $userRole');

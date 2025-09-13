@@ -202,7 +202,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                         ),
                         const SizedBox(width: 8),
                         const Text(
-                          'Takım Durumu - Güncellendi',
+                          'Takım Durumu',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,

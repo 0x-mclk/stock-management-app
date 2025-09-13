@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/real_time_service.dart';
 import '../services/invitation_service.dart';
 import '../models/invitation_model.dart';
@@ -31,10 +32,141 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
   }
 
   void _updateUserActivity() async {
+    // Mevcut kullanıcının aktivitesini güncelle
     await _realTimeService.updateUserActivity(
       storeId: widget.storeId,
       userId: widget.currentUserId,
     );
+
+    // Mağaza sahibi kaydının var olduğundan emin ol
+    await _ensureStoreOwnerExists();
+
+    // Tüm store üyelerinin aktivite bilgilerini senkronize et
+    await _synchronizeAllMembersActivity();
+  }
+
+  /// Mağaza sahibi kaydının var olduğundan emin ol
+  Future<void> _ensureStoreOwnerExists() async {
+    try {
+      // Firebase Auth'dan mevcut kullanıcının gerçek email'ini al
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null || currentUser.email == null) {
+        print('❌ Mevcut kullanıcı bulunamadı veya email adresi yok');
+        return;
+      }
+
+      final currentUserEmail = currentUser.email!;
+      print('📧 Mevcut kullanıcı email: $currentUserEmail');
+      print('🏪 Mevcut store ID: ${widget.storeId}');
+
+      // Mağaza sahibi kaydını temizle ve doğruyu ekle
+      await _invitationService.ensureStoreOwnerExistsWithCleanup(
+        storeId: widget.storeId,
+        userId: widget.currentUserId,
+        email: currentUserEmail,
+      );
+
+      // User activity kayıtlarını da temizle
+      await _realTimeService.cleanupIncorrectUserActivities(
+        storeId: widget.storeId,
+        correctUserId: widget.currentUserId,
+        correctEmail: currentUserEmail,
+      );
+    } catch (e) {
+      print('❌ Mağaza sahibi kaydı oluşturulamadı: $e');
+    }
+  }
+
+  /// Tüm store üyelerinin aktivite bilgilerini senkronize et
+  Future<void> _synchronizeAllMembersActivity() async {
+    try {
+      print('🔄 Store üyelerini almaya başlıyor: StoreID = ${widget.storeId}');
+
+      // Store'daki tüm aktif üyeleri al
+      final members =
+          await _invitationService.getMembersStream(widget.storeId).first;
+
+      print('👥 Alınan üye sayısı: ${members.length}');
+      for (final member in members) {
+        print(
+            '👤 Üye: ${member.email}, Status: ${member.status}, UserID: ${member.userId}');
+      }
+
+      // Eksik userId alanlarını güncelle
+      await _updateMissingUserIds(members);
+
+      // Aktif üyeleri filtrele
+      final activeMembers = members
+          .where((member) =>
+              member.status == InvitationStatus.owner ||
+              member.status == InvitationStatus.accepted)
+          .toList();
+
+      print('🟢 Aktif üye sayısı: ${activeMembers.length}/${members.length}');
+
+      // Batch update için kullanıcı listesi hazırla
+      final usersForBatchUpdate = activeMembers
+          .where((member) => member.userId != null && member.userId!.isNotEmpty)
+          .map((member) => {
+                'userId': member.userId!,
+                'email': member.email,
+                'role': member.role.name,
+              })
+          .toList();
+
+      print(
+          '🔄 Batch update için hazırlanan kullanıcı sayısı: ${usersForBatchUpdate.length}');
+
+      // Batch update kullanarak tüm üyelerin aktivitesini güncelle
+      if (usersForBatchUpdate.isNotEmpty) {
+        await _realTimeService.batchUpdateUserActivity(
+          storeId: widget.storeId,
+          users: usersForBatchUpdate,
+        );
+      }
+
+      print(
+          '🔄 Tüm store üyelerinin aktivite bilgileri senkronize edildi (${usersForBatchUpdate.length} üye)');
+    } catch (e) {
+      print('❌ Üye aktivite senkronizasyon hatası: $e');
+    }
+  }
+
+  /// Eksik userId alanlarını güncelle
+  Future<void> _updateMissingUserIds(List<InvitationModel> members) async {
+    try {
+      // User activity verilerini al
+      final activityData =
+          await _realTimeService.getUserActivityStream(widget.storeId).first;
+
+      print('🔍 Activity verilerinde ${activityData.length} kullanıcı bulundu');
+
+      for (final member in members) {
+        // Eğer userId boşsa, email eşleştirmesi ile bulmaya çalış
+        if (member.userId == null || member.userId!.isEmpty) {
+          // E-mail bazlı eşleştirme deneme
+          final matchingActivity = activityData.firstWhere(
+            (activity) => activity['email'] == member.email,
+            orElse: () => <String, dynamic>{},
+          );
+
+          if (matchingActivity.isNotEmpty && member.id != null) {
+            final foundUserId = matchingActivity['userId'];
+            print('🔄 ${member.email} için userId bulundu: $foundUserId');
+
+            // Member kaydını güncelle
+            await _invitationService.updateMemberUserId(
+              memberId: member.id!,
+              userId: foundUserId,
+            );
+          } else {
+            print('⚠️ ${member.email} için activity kaydı bulunamadı');
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ UserId güncelleme hatası: $e');
+    }
   }
 
   @override
@@ -42,24 +174,6 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
     print('🔄 MultiUserIndicatorsWidget build called');
     return Column(
       children: [
-        // Test mesajı - görünürlük testi
-        Container(
-          padding: const EdgeInsets.all(12),
-          margin: const EdgeInsets.only(bottom: 8),
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.1),
-            border: Border.all(color: Colors.red, width: 2),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Text(
-            '🔄 YENİ TAKIM DURUMU WİDGET AKTİF!',
-            style: TextStyle(
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
-        ),
         _buildOnlineUsers(),
         const SizedBox(height: 8),
         _buildMemberOverview(),
@@ -69,14 +183,13 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
 
   Widget _buildOnlineUsers() {
     print('📊 Building online users stream for StoreID: ${widget.storeId}');
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _realTimeService.getUserActivityStream(widget.storeId),
-      builder: (context, snapshot) {
-        print(
-            '📊 Stream state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, error: ${snapshot.error}');
 
-        if (snapshot.hasError) {
-          print('❌ Stream error: ${snapshot.error}');
+    // İki stream'i birleştir: user_activity ve store_invitations
+    return StreamBuilder<List<InvitationModel>>(
+      stream: _invitationService.getMembersStream(widget.storeId),
+      builder: (context, membersSnapshot) {
+        if (membersSnapshot.hasError) {
+          print('❌ Members stream error: ${membersSnapshot.error}');
           return Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -84,14 +197,14 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              'Hata: ${snapshot.error}',
+              'Üye listesi hatası: ${membersSnapshot.error}',
               style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           );
         }
 
-        if (!snapshot.hasData) {
-          print('⏳ No data yet, showing loading...');
+        if (!membersSnapshot.hasData) {
+          print('⏳ Members data loading...');
           return Container(
             padding: const EdgeInsets.all(12),
             child: const Center(
@@ -104,82 +217,204 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
           );
         }
 
-        final users = snapshot.data!;
-        final onlineUsers = users.where((user) {
-          final lastActivity = user['lastActivity'];
-          if (lastActivity == null) return false;
+        final allMembers = membersSnapshot.data!;
+        final activeMembers = allMembers
+            .where((member) =>
+                member.status == InvitationStatus.owner ||
+                member.status == InvitationStatus.accepted)
+            .toList();
 
-          final lastActiveTime = lastActivity.toDate();
-          final now = DateTime.now();
-          final difference = now.difference(lastActiveTime);
+        // Şimdi user_activity stream'ini al
+        return StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _realTimeService.getUserActivityStream(widget.storeId),
+          builder: (context, activitySnapshot) {
+            print(
+                '📊 Activity Stream state: ${activitySnapshot.connectionState}, hasData: ${activitySnapshot.hasData}, error: ${activitySnapshot.error}');
 
-          return difference.inMinutes <
-              5; // Active if last activity within 5 minutes
-        }).toList();
-
-        if (onlineUsers.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.person_outline, color: Colors.grey, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  'Şu anda sadece siz çevrimisiniz',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                  ),
+            if (activitySnapshot.hasError) {
+              print('❌ Activity Stream error: ${activitySnapshot.error}');
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ],
-            ),
-          );
-        }
+                child: Text(
+                  'Aktivite stream hatası: ${activitySnapshot.error}',
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              );
+            }
 
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+            // Activity verisi yok ise bile üyeleri göster
+            final activityData = activitySnapshot.data ?? [];
+
+            // Üyeleri aktivite verileri ile birleştir
+            List<Map<String, dynamic>> combinedUsers = [];
+
+            for (final member in activeMembers) {
+              // userId varsa direkt eşleştir, yoksa email'dan türet
+              String? userId = member.userId;
+
+              // UserId yoksa, activity verilerinden email ile eşleştirmeye çalış
+              if (userId == null || userId.isEmpty) {
+                // Activity verilerinden bu email'e sahip kullanıcıyı bul
+                final matchingActivity = activityData.firstWhere(
+                  (activity) => activity['email'] == member.email,
+                  orElse: () => <String, dynamic>{},
+                );
+                userId = matchingActivity['userId'];
+
+                // Hala userId bulunamadıysa, email'den unique bir ID türet
+                if (userId == null || userId.isEmpty) {
+                  print(
+                      '⚠️ Üye ${member.email} için userId bulunamadı, varsayılan değer kullanılıyor');
+                  // Email'den basit bir hash oluştur
+                  userId = member.email.hashCode.abs().toString();
+                }
+              }
+
+              // Bu üyenin aktivite verisini bul (userId veya email ile)
+              final activity = activityData.firstWhere(
+                (activity) =>
+                    activity['userId'] == userId ||
+                    activity['email'] == member.email,
+                orElse: () => <String, dynamic>{},
+              );
+
+              // Birleştirilmiş veri oluştur
+              final combinedData = {
+                'userId': userId,
+                'email': member.email,
+                'role': member.role.name,
+                'storeId': widget.storeId,
+                'lastActivity': activity['lastActivity'] ?? member.lastActivity,
+                'isActive': activity['isActive'] ?? true,
+                'memberStatus': member.status.name,
+                'hasRealActivity':
+                    activity.isNotEmpty, // Gerçek aktivite verisi var mı?
+              };
+
+              print(
+                  '👤 Combined user: ${member.email}, userId: $userId, hasActivity: ${activity.isNotEmpty}');
+              combinedUsers.add(combinedData);
+            }
+
+            print(
+                '👥 Combined users data: ${combinedUsers.length} üye (${activeMembers.length} aktif üyeden)');
+
+            // Online kullanıcıları filtrele
+            final onlineUsers = combinedUsers.where((user) {
+              final lastActivity = user['lastActivity'];
+              final hasRealActivity = user['hasRealActivity'] ?? false;
+
+              // Gerçek aktivite verisi yoksa, üyeyi varsayılan olarak çevrimiçi say
+              if (!hasRealActivity) {
+                print(
+                    '🟡 ${user['email']} - gerçek aktivite verisi yok, varsayılan olarak çevrimiçi');
+                return true;
+              }
+
+              if (lastActivity == null) {
+                print('🔴 ${user['email']} - lastActivity null');
+                return false;
+              }
+
+              DateTime lastActiveTime;
+              if (lastActivity is DateTime) {
+                lastActiveTime = lastActivity;
+              } else {
+                try {
+                  lastActiveTime = lastActivity.toDate();
+                } catch (e) {
+                  print('🔴 ${user['email']} - lastActivity format hatası: $e');
+                  return false;
+                }
+              }
+
+              final now = DateTime.now();
+              final difference = now.difference(lastActiveTime);
+              final isOnline =
+                  difference.inMinutes < 5; // 5 dakika içinde aktif
+
+              print(
+                  '👤 ${user['email']} - Son aktivite: ${difference.inMinutes} dakika önce, Çevrimiçi: $isOnline');
+              return isOnline;
+            }).toList();
+
+            print(
+                '🟢 Online users: ${onlineUsers.length}/${combinedUsers.length}');
+
+            if (onlineUsers.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.person_outline,
+                        color: Colors.grey, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Toplam ${combinedUsers.length} üye var, şu anda kimse çevrimiçi değil',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Çevrimiçi Takım (${onlineUsers.length}/${combinedUsers.length})',
+                          style: TextStyle(
+                            color: Colors.green[700],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Çevrimiçi Takım (${onlineUsers.length})',
-                    style: TextStyle(
-                      color: Colors.green[700],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: onlineUsers
+                        .map((user) => _buildUserChip(user))
+                        .toList(),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children:
-                    onlineUsers.map((user) => _buildUserChip(user)).toList(),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

@@ -17,7 +17,150 @@ class InvitationService {
   //   return _firestore.collection('stores').doc(storeId).collection('members');
   // }
 
-  /// Send invitation to join store
+  /// Add store owner record
+  Future<bool> addStoreOwner({
+    required String storeId,
+    required String userId,
+    required String email,
+  }) async {
+    try {
+      // Check if owner already exists
+      final existingOwner = await _firestore
+          .collection('store_invitations')
+          .where('storeId', isEqualTo: storeId)
+          .where('status', isEqualTo: 'owner')
+          .get();
+
+      if (existingOwner.docs.isNotEmpty) {
+        debugPrint('✅ Store owner already exists for: $storeId');
+        return true;
+      }
+
+      // Create owner record
+      final ownerData = {
+        'email': email,
+        'userId': userId,
+        'storeId': storeId,
+        'role': 'owner',
+        'status': 'owner',
+        'invitedAt': FieldValue.serverTimestamp(),
+        'joinedAt': FieldValue.serverTimestamp(),
+        'invitedBy': userId, // Owner invites themselves
+        'permissions': InvitationModel.getDefaultPermissions(UserRole.owner),
+        'emailSent': false,
+        'adminApprovalRequired': false,
+        'isActive': true,
+        'lastActivity': FieldValue.serverTimestamp(),
+      };
+
+      await _firestore.collection('store_invitations').add(ownerData);
+      debugPrint('✅ Store owner added: $email for store: $storeId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error adding store owner: $e');
+      return false;
+    }
+  }
+
+  /// Update member userId
+  Future<bool> updateMemberUserId({
+    required String memberId,
+    required String userId,
+  }) async {
+    try {
+      await _firestore.collection('store_invitations').doc(memberId).update({
+        'userId': userId,
+        'lastActivity': FieldValue.serverTimestamp(),
+      });
+      debugPrint('✅ Member userId updated: $memberId -> $userId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error updating member userId: $e');
+      return false;
+    }
+  }
+
+  /// Clean up incorrect store owner records
+  Future<bool> cleanupIncorrectOwners({
+    required String storeId,
+    required String correctUserId,
+    required String correctEmail,
+  }) async {
+    try {
+      // Bu store'daki tüm owner kayıtlarını al
+      final ownerRecords = await _firestore
+          .collection('store_invitations')
+          .where('storeId', isEqualTo: storeId)
+          .where('status', isEqualTo: 'owner')
+          .get();
+
+      debugPrint(
+          '🔍 Store $storeId için ${ownerRecords.docs.length} owner kaydı bulundu');
+
+      // Yanlış kayıtları sil (doğru kullanıcı dışındaki tüm owner kayıtları)
+      for (final doc in ownerRecords.docs) {
+        final data = doc.data();
+        final recordUserId = data['userId'];
+        final recordEmail = data['email'];
+
+        // Eğer doğru kullanıcı değilse, sil
+        if (recordUserId != correctUserId || recordEmail != correctEmail) {
+          debugPrint(
+              '❌ Yanlış owner kaydı siliniyor: $recordEmail (${doc.id})');
+          await doc.reference.delete();
+        } else {
+          debugPrint('✅ Doğru owner kaydı korunuyor: $recordEmail');
+        }
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error cleaning up incorrect owners: $e');
+      return false;
+    }
+  }
+
+  /// Ensure store owner exists (with cleanup)
+  Future<void> ensureStoreOwnerExistsWithCleanup({
+    required String storeId,
+    required String userId,
+    required String email,
+  }) async {
+    try {
+      // Önce yanlış kayıtları temizle
+      await cleanupIncorrectOwners(
+        storeId: storeId,
+        correctUserId: userId,
+        correctEmail: email,
+      );
+
+      // Sonra doğru owner kaydını ekle
+      await addStoreOwner(
+        storeId: storeId,
+        userId: userId,
+        email: email,
+      );
+    } catch (e) {
+      debugPrint('❌ Error ensuring store owner exists with cleanup: $e');
+    }
+  }
+
+  Future<void> ensureStoreOwnerExists({
+    required String storeId,
+    required String userId,
+    required String email,
+  }) async {
+    try {
+      await addStoreOwner(
+        storeId: storeId,
+        userId: userId,
+        email: email,
+      );
+    } catch (e) {
+      debugPrint('❌ Error ensuring store owner exists: $e');
+    }
+  }
+
   Future<String?> sendInvitation({
     required String storeId,
     required String email,
@@ -138,14 +281,24 @@ class InvitationService {
 
   /// Get all members for a store
   Stream<List<InvitationModel>> getMembersStream(String storeId) {
+    print('🔍 Üye stream arama başladı: StoreID = $storeId');
     return _firestore
         .collection('store_invitations')
         .where('storeId', isEqualTo: storeId)
         .snapshots()
         .map((snapshot) {
-      final invitations = snapshot.docs
-          .map((doc) => InvitationModel.fromFirestore(doc))
-          .toList();
+      print('📊 Firestore snapshot aldı: ${snapshot.docs.length} doküman');
+
+      final invitations = snapshot.docs.map((doc) {
+        print('📄 Doküman işleniyor: ${doc.id}, data: ${doc.data()}');
+        return InvitationModel.fromFirestore(doc);
+      }).toList();
+
+      print('👥 Toplam üye sayısı: ${invitations.length}');
+      for (final invitation in invitations) {
+        print(
+            '👤 Üye: ${invitation.email}, Status: ${invitation.status}, UserId: ${invitation.userId}');
+      }
 
       // Client-side sorting
       invitations.sort((a, b) => b.invitedAt.compareTo(a.invitedAt));

@@ -5,6 +5,7 @@ import '../services/data_service.dart';
 import '../services/store_selection_service.dart';
 import '../services/firebase_sync_service.dart';
 import 'product_provider.dart';
+import 'realtime_product_provider.dart';
 
 class CartItem {
   final Product product;
@@ -247,7 +248,44 @@ class SalesProvider extends ChangeNotifier {
     }).toList();
   }
 
-  // Günlük satış kârı hesaplama
+  // Günlük satış kârı hesaplama (RealtimeProductProvider overload)
+  double getDailyProfitFromRealtime(RealtimeProductProvider realtimeProvider) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+
+    final todaysSales = _sales.where((sale) {
+      if (sale.supplierId != null) return false;
+      return sale.createdAt.isAtSameMomentAs(today) ||
+          sale.createdAt.isAfter(today) && sale.createdAt.isBefore(tomorrow);
+    }).toList();
+
+    double totalProfit = 0.0;
+
+    for (final sale in todaysSales) {
+      for (final item in sale.items) {
+        final product = realtimeProvider.products.firstWhere(
+          (p) => p.id == item.productId,
+          orElse: () => Product(
+            barcode: item.productBarcode,
+            name: item.productName,
+            purchasePrice: 0.0,
+            salePrice: item.unitPrice,
+            stock: 0,
+            storeId: currentStoreId,
+          ),
+        );
+
+        double itemProfit =
+            (item.unitPrice - (product.purchasePrice ?? 0.0)) * item.quantity;
+        totalProfit += itemProfit;
+      }
+    }
+
+    return totalProfit;
+  }
+
+  // Günlük satış kârı hesaplama (eski ProductProvider - backward compatibility)
   double getDailyProfit(ProductProvider productProvider) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);

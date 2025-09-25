@@ -178,6 +178,11 @@ class RealtimeProductProvider extends ChangeNotifier {
     }
   }
 
+  // Ürün sil (API consistency için removeProduct alias)
+  Future<void> removeProduct(String productId) async {
+    await deleteProduct(productId);
+  }
+
   // Ürün sil
   Future<bool> deleteProduct(String productId) async {
     if (_currentStoreId == null || _currentStoreId!.isEmpty) {

@@ -32,9 +32,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadData() async {
     try {
+      // Start real-time updates for dashboard statistics
+      final realtimeProvider =
+          Provider.of<RealtimeProductProvider>(context, listen: false);
+      realtimeProvider.startRealtimeUpdates();
+
       // Don't load any data initially - let each screen load its own data when needed
       // This prevents memory overload at startup
-      // Debug print removed
     } catch (e) {
       // Debug print removed
     }
@@ -159,7 +163,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 // Gerçek günlük kâr hesaplama (satış fiyatı - alış fiyatı)
                 double dailyProfit =
-                    salesProvider.getDailyProfit(productProvider);
+                    salesProvider.getDailyProfitFromRealtime(realtimeProvider);
 
                 return LayoutBuilder(
                   builder: (context, constraints) {
@@ -173,7 +177,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         _buildSummaryCard(
                           'Toplam Ürün',
-                          '${productProvider.products.length}',
+                          '${realtimeProvider.products.length}',
                           Icons.inventory,
                           Colors.blue,
                         ),
@@ -192,7 +196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _buildSummaryCard(
                           'Stok Değeri',
                           CurrencyFormatter.formatWithSymbol(
-                              _calculateStockValue(productProvider.products)),
+                              _calculateStockValue(realtimeProvider.products)),
                           Icons.account_balance_wallet,
                           Colors.purple,
                         ),

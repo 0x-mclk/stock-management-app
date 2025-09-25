@@ -537,15 +537,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
             child: const Text('İptal'),
           ),
           ElevatedButton(
-            onPressed: () {
-              context.read<ProductProvider>().removeProduct(product.id!);
+            onPressed: () async {
+              final success = await context
+                  .read<RealtimeProductProvider>()
+                  .deleteProduct(product.id!);
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Ürün silindi'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+              if (success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Ürün başarıyla silindi'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Ürün silinemedi'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Sil'),

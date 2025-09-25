@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Add for real-time updates
 
 import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../models/product.dart';
 import '../utils/currency_formatter.dart';
 import 'barcode_scanner_screen.dart';
@@ -30,11 +30,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
   @override
   void initState() {
     super.initState();
-    // Ensure products are loaded when screen opens
+    // Start real-time updates when screen opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final productProvider =
-          Provider.of<ProductProvider>(context, listen: false);
-      productProvider.loadProducts();
+      final realtimeProvider =
+          Provider.of<RealtimeProductProvider>(context, listen: false);
+      realtimeProvider.startRealtimeUpdates();
     });
   }
 
@@ -123,7 +123,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
           // Products List
           Expanded(
-            child: Consumer<ProductProvider>(
+            child: Consumer<RealtimeProductProvider>(
               builder: (context, productProvider, child) {
                 final filteredProducts = productProvider.products
                     .where((product) =>

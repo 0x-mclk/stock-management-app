@@ -111,7 +111,16 @@ class RealtimeProductProvider extends ChangeNotifier {
 
       if (success) {
         print('✅ Ürün Firebase\'e eklendi');
-        // Real-time stream otomatik olarak güncellemeyi alacak
+
+        // 🔥 SORUN ÇÖZÜMÜ: Yerel listeye hemen ekle (geçici ID ile)
+        // Real-time stream gerçek ID ile güncelleyecek
+        final tempProduct = product.copyWith(
+          id: DateTime.now().millisecondsSinceEpoch.toString(), // Geçici ID
+        );
+        _products.add(tempProduct);
+        print('✅ Ürün yerel listeye eklendi: ${product.name}');
+        notifyListeners(); // UI'yı hemen güncelle
+
         return true;
       } else {
         print('❌ Ürün Firebase\'e eklenemedi');
@@ -146,7 +155,15 @@ class RealtimeProductProvider extends ChangeNotifier {
 
       if (success) {
         print('✅ Ürün Firebase\'de güncellendi');
-        // Real-time stream otomatik olarak güncellemeyi alacak
+
+        // 🔥 SORUN ÇÖZÜMÜ: Yerel listeyi hemen güncelle
+        final productIndex = _products.indexWhere((p) => p.id == product.id);
+        if (productIndex != -1) {
+          _products[productIndex] = product;
+          print('✅ Yerel liste güncellendi: ${product.name}');
+          notifyListeners(); // UI'yı hemen güncelle
+        }
+
         return true;
       } else {
         print('❌ Ürün Firebase\'de güncellenemedi');
@@ -178,7 +195,12 @@ class RealtimeProductProvider extends ChangeNotifier {
 
       if (success) {
         print('✅ Ürün Firebase\'den silindi');
-        // Real-time stream otomatik olarak güncellemeyi alacak
+
+        // 🔥 SORUN ÇÖZÜMÜ: Yerel listeden hemen sil
+        _products.removeWhere((p) => p.id == productId);
+        print('✅ Ürün yerel listeden silindi: $productId');
+        notifyListeners(); // UI'yı hemen güncelle
+
         return true;
       } else {
         print('❌ Ürün Firebase\'den silinemedi');

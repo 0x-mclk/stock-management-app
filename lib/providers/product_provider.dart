@@ -5,11 +5,12 @@ import '../services/data_service.dart';
 import '../services/store_selection_service.dart';
 import '../services/firebase_sync_service.dart';
 import '../services/firestore_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/offline_service.dart';
 import 'notification_provider.dart';
 
 // ✅ Add these imports for Firestore document changes
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 
 class ProductProvider extends ChangeNotifier {
   List<Product> _products = [];
@@ -22,6 +23,8 @@ class ProductProvider extends ChangeNotifier {
   final DataService _dataService = DataService();
   final FirebaseSyncService _syncService = FirebaseSyncService();
   final FirestoreService _firestoreService = FirestoreService.instance;
+  final ConnectivityService _connectivityService = ConnectivityService();
+  final OfflineService _offlineService = OfflineService();
   NotificationProvider? _notificationProvider;
 
   // 🔥 Firebase Real-Time Stream
@@ -151,9 +154,6 @@ class ProductProvider extends ChangeNotifier {
             case DocumentChangeType.removed:
               print('🗑️ Product removed: ${product.name} (ID: ${product.id})');
               _handleProductRemoved(product);
-            default:
-              print(
-                  '❓ Unknown change type for product: ${product.name} (ID: ${product.id})');
           }
         });
 
@@ -192,7 +192,7 @@ class ProductProvider extends ChangeNotifier {
       // Product doesn't exist locally, add it
       await _dataService.saveProduct(product);
       print('✅ Product saved to local DB: ${product.name} (ID: ${product.id})');
-    } else if (localProduct.updatedAt?.isBefore(product.updatedAt) ?? true) {
+    } else if (localProduct.updatedAt.isBefore(product.updatedAt)) {
       // Product exists but Firebase has newer version
       await _dataService.saveProduct(product);
       print(
@@ -200,21 +200,64 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
-  void _handleProductModified(Product product) async {
+  void _handleProductModified(Product firebaseProduct) async {
     final storeId = _currentStoreId ?? '';
     if (storeId.isEmpty) return;
 
     // ✅ Store ID doğrulaması
-    if (product.storeId != storeId) {
+    if (firebaseProduct.storeId != storeId) {
       print(
-          '⚠️ Modified product ${product.id} belongs to different store: ${product.storeId} vs current: $storeId');
+          '⚠️ Modified product ${firebaseProduct.id} belongs to different store: ${firebaseProduct.storeId} vs current: $storeId');
       return; // Farklı mağazaya ait ürünü işleme
     }
 
-    // Always update modified products
-    await _dataService.saveProduct(product);
-    print(
-        '🔄 Product updated in local DB: ${product.name} (ID: ${product.id})');
+    if (firebaseProduct.id == null) return;
+
+    // 🔥 YENİ: CONFLICT RESOLUTION - Timestamp bazlı çakışma çözümü
+    try {
+      final localProduct =
+          await _dataService.getProductById(firebaseProduct.id!);
+
+      if (localProduct != null) {
+        print('🔍 Conflict check: Firebase vs Local timestamps');
+        print('   Firebase: ${firebaseProduct.updatedAt}');
+        print('   Local: ${localProduct.updatedAt}');
+
+        // Timestamp karşılaştırması
+        if (firebaseProduct.updatedAt.isAfter(localProduct.updatedAt)) {
+          // Firebase daha yeni - Firebase'i kabul et
+          print('✅ Firebase version is newer - accepting Firebase data');
+          await _dataService.saveProduct(firebaseProduct);
+          print(
+              '🔄 Firebase product saved to local DB: ${firebaseProduct.name}');
+        } else if (localProduct.updatedAt.isAfter(firebaseProduct.updatedAt)) {
+          // Local daha yeni - Local'i Firebase'e gönder
+          print('⚠️ Local version is newer - syncing local to Firebase');
+          final success = await _firestoreService.saveProduct(
+              storeId, localProduct.id, localProduct.toMap());
+
+          if (success) {
+            print('✅ Local product synced to Firebase: ${localProduct.name}');
+          } else {
+            print('❌ Failed to sync local product to Firebase');
+          }
+        } else {
+          // Aynı timestamp - Firebase'i kabul et (server timestamp'e güven)
+          print(
+              '🔄 Same timestamp - accepting Firebase version (server timestamp)');
+          await _dataService.saveProduct(firebaseProduct);
+        }
+      } else {
+        // Yerel ürün yok - Firebase'i kabul et
+        print('🆕 Local product not found - accepting Firebase data');
+        await _dataService.saveProduct(firebaseProduct);
+        print('✅ Firebase product saved to local DB: ${firebaseProduct.name}');
+      }
+    } catch (e) {
+      print('❌ Conflict resolution error: $e');
+      // Hata durumunda Firebase'i kabul et
+      await _dataService.saveProduct(firebaseProduct);
+    }
   }
 
   void _handleProductRemoved(Product product) async {
@@ -254,22 +297,60 @@ class ProductProvider extends ChangeNotifier {
 
       final productWithStore = product.copyWith(storeId: storeId);
 
-      // 1️⃣ Önce yerel veritabanına kaydet
-      await _dataService.saveProduct(productWithStore);
-      print('✅ Ürün yerel veritabanına kaydedildi: ${productWithStore.name}');
+      // 🌐 CONNECTION CHECK
+      if (_connectivityService.isOffline) {
+        print('� Offline mode - adding to queue: ${productWithStore.name}');
 
-      // 2️⃣ Firebase'e de kaydet
-      try {
-        print('🔄 Yeni ürün Firebase\'e kaydediliyor...');
-        await _syncService.syncToFirebase();
-        print('✅ Ürün Firebase\'e başarıyla kaydedildi');
-      } catch (e) {
-        print('⚠️ Firebase senkronizasyon hatası: $e');
-        // Firebase hatası olsa bile yerel kayıt başarılı olduğu için devam et
+        // Offline queue'ya ekle
+        await _offlineService.addPendingOperation(
+          type: 'product_add',
+          data: productWithStore.toMap(),
+          description: 'Ürün eklendi: ${productWithStore.name}',
+        );
+
+        // Yerel veritabanına kaydet
+        await _dataService.saveProduct(productWithStore);
+        print('✅ Ürün offline modda yerel veritabanına kaydedildi');
+
+        // UI'yı güncelle
+        await refreshProducts();
+        return;
       }
 
-      // 3️⃣ Ürün listesini yenile
-      await refreshProducts();
+      // �🔥 ONLINE MODE: ÖNCELİKLE FİREBASE'E DİREKT KAYDET
+      print(
+          '🔄 Online mode - Ürün Firebase\'e direkt kaydediliyor: ${productWithStore.name}');
+
+      final firebaseSuccess = await _firestoreService.saveProduct(
+          storeId,
+          null, // New product - Firebase will generate ID
+          productWithStore.toMap());
+
+      if (!firebaseSuccess) {
+        // Firebase başarısız - offline queue'ya ekle
+        print('⚠️ Firebase kayıt başarısız - offline queue\'ya ekleniyor');
+        await _offlineService.addPendingOperation(
+          type: 'product_add',
+          data: productWithStore.toMap(),
+          description:
+              'Ürün eklendi (Firebase hatası): ${productWithStore.name}',
+        );
+      }
+
+      print(
+          '✅ Ürün Firebase\'e başarıyla kaydedildi: ${productWithStore.name}');
+
+      // 🔄 Firebase başarılı olursa local backup kaydet
+      try {
+        await _dataService.saveProduct(productWithStore);
+        print('✅ Ürün yerel veritabanına backup olarak kaydedildi');
+      } catch (e) {
+        print('⚠️ Yerel backup hatası (Firebase\'de kayıtlı): $e');
+        // Firebase'de kayıtlı olduğu için devam et
+      }
+
+      // 🔄 Real-time stream Firebase'den güncelleyecek, manuel refresh gereksiz
+      print('🔥 Ürün eklendi - Firebase stream otomatik güncelleyecek');
     } catch (e) {
       print('❌ Error adding product: $e');
       rethrow;
@@ -287,29 +368,70 @@ class ProductProvider extends ChangeNotifier {
         throw Exception('Bu ürünü düzenleme yetkiniz yok');
       }
 
-      // 1️⃣ Önce yerel veritabanına kaydet
-      await _dataService.saveProduct(product);
-      print('✅ Ürün yerel veritabanında güncellendi: ${product.name}');
+      if (product.id == null) {
+        throw Exception('Ürün ID\'si bulunamadı - güncelleme yapılamaz');
+      }
 
-      // 2️⃣ Firebase'e de kaydet
+      // 🌐 CONNECTION CHECK
+      if (_connectivityService.isOffline) {
+        print('📱 Offline mode - adding update to queue: ${product.name}');
+
+        // Offline queue'ya ekle
+        await _offlineService.addPendingOperation(
+          type: 'product_update',
+          data: product.toMap(),
+          description: 'Ürün güncellendi: ${product.name}',
+        );
+
+        // Yerel veritabanında güncelle
+        await _dataService.saveProduct(product);
+        print('✅ Ürün offline modda yerel veritabanında güncellendi');
+
+        // UI'yı güncelle
+        final index = _products.indexWhere((p) => p.id == product.id);
+        if (index != -1) {
+          _products[index] = product;
+          _filterProducts();
+          notifyListeners();
+        }
+        return;
+      }
+
+      // 🔥 ONLINE MODE: ÖNCELİKLE FİREBASE'E DİREKT GÜNCELLE
+      print(
+          '🔄 Online mode - Ürün Firebase\'de direkt güncelleniyor: ${product.name}');
+
+      final firebaseSuccess = await _firestoreService.saveProduct(
+          storeId,
+          product.id, // Existing product - use existing ID
+          product.toMap());
+
+      if (!firebaseSuccess) {
+        // Firebase başarısız - offline queue'ya ekle
+        print('⚠️ Firebase güncelleme başarısız - offline queue\'ya ekleniyor');
+        await _offlineService.addPendingOperation(
+          type: 'product_update',
+          data: product.toMap(),
+          description: 'Ürün güncellendi (Firebase hatası): ${product.name}',
+        );
+      }
+
+      print('✅ Ürün Firebase\'de başarıyla güncellendi: ${product.name}');
+
+      // 🔄 Firebase başarılı olursa local backup güncelle
       try {
-        print('🔄 Ürün güncellemesi Firebase\'e gönderiliyor...');
-        await _syncService.syncToFirebase();
-        print('✅ Ürün Firebase\'de başarıyla güncellendi');
+        await _dataService.saveProduct(product);
+        print('✅ Ürün yerel veritabanında backup olarak güncellendi');
       } catch (e) {
-        print('⚠️ Firebase senkronizasyon hatası: $e');
-        // Firebase hatası olsa bile yerel güncelleme başarılı olduğu için devam et
+        print('⚠️ Yerel backup hatası (Firebase\'de güncel): $e');
+        // Firebase'de güncel olduğu için devam et
       }
 
-      // 3️⃣ Yerel UI'yı güncelle
-      final index = _products.indexWhere((p) => p.id == product.id);
-      if (index != -1) {
-        _products[index] = product;
-        _filterProducts();
-        _notificationProvider?.checkLowStockProducts(_products);
-        notifyListeners();
-      }
+      // 🔄 Real-time stream Firebase'den güncelleyecek
+      print(
+          '🔥 Ürün güncellendi - Firebase stream otomatik senkronizasyonu sağlayacak');
     } catch (e) {
+      print('❌ Error updating product: $e');
       rethrow;
     }
   }
@@ -327,30 +449,31 @@ class ProductProvider extends ChangeNotifier {
         throw Exception('Bu ürünü silme yetkiniz yok');
       }
 
-      if (productId == null) {
-        print('❌ Product ID is null');
-        return;
+      // 🔥 YENİ: ÖNCELİKLE FİREBASE'DEN DİREKT SİL
+      print(
+          '🗑️ Ürün Firebase\'den direkt siliniyor: ${product.name} (ID: $productId)');
+
+      final firebaseSuccess =
+          await _firestoreService.deleteProduct(storeId, productId);
+
+      if (!firebaseSuccess) {
+        throw Exception('Firebase\'den silme başarısız - işlem iptal edildi');
       }
 
-      // 1️⃣ Önce yerel veritabanından sil
-      await _dataService.deleteProduct(productId);
-      print('✅ Ürün yerel veritabanından silindi: ${product.name}');
+      print('✅ Ürün Firebase\'den başarıyla silindi: ${product.name}');
 
-      // 2️⃣ Firebase'den de sil
+      // 🔄 Firebase başarılı olursa local'den de sil
       try {
-        print(
-            '🗑️ Ürün Firebase\'den siliniyor: ${product.name} (ID: $productId)');
-        await _firestoreService.deleteProduct(storeId, productId);
-        print('✅ Ürün Firebase\'den başarıyla silindi');
+        await _dataService.deleteProduct(productId);
+        print('✅ Ürün yerel veritabanından da silindi');
       } catch (e) {
-        print('⚠️ Firebase silme hatası: $e');
-        // Firebase hatası olsa bile yerel silme başarılı olduğu için devam et
+        print('⚠️ Yerel silme hatası (Firebase\'den silindi): $e');
+        // Firebase'den silindiği için devam et
       }
 
-      // 3️⃣ Yerel UI'yı güncelle
-      _products.removeWhere((p) => p.id == productId);
-      _filterProducts();
-      notifyListeners();
+      // 🔄 Real-time stream Firebase'den güncelleyecek
+      print(
+          '🔥 Ürün silindi - Firebase stream otomatik senkronizasyonu sağlayacak');
     } catch (e) {
       rethrow;
     }

@@ -14,49 +14,92 @@ class FirestoreService {
   static FirestoreService get instance => _instance ??= FirestoreService._();
   FirestoreService._();
 
-  /// Add or update product
+  /// Add or update product with retry mechanism
   Future<bool> saveProduct(String storeId, String? productId,
       Map<String, dynamic> productData) async {
-    try {
-      productData['lastModified'] = FieldValue.serverTimestamp();
+    // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        productData['lastModified'] = FieldValue.serverTimestamp();
+        productData['storeId'] = storeId; // ✅ Store ID'yi garantile
 
-      if (productId == null) {
-        // Add new product
-        await _firestore
-            .collection(_collectionStores)
-            .doc(storeId)
-            .collection(_collectionProducts)
-            .add(productData);
-      } else {
-        // Update existing product
+        if (productId == null) {
+          // 🆕 Add new product - Firebase generates ID
+          print('🔄 Attempt $attempt: Adding new product to Firebase...');
+          final docRef = await _firestore
+              .collection(_collectionStores)
+              .doc(storeId)
+              .collection(_collectionProducts)
+              .add(productData);
+
+          print('✅ New product added with Firebase ID: ${docRef.id}');
+          return true; // Success - exit retry loop
+        } else {
+          // 🔄 Update existing product
+          print('🔄 Attempt $attempt: Updating existing product: $productId');
+          await _firestore
+              .collection(_collectionStores)
+              .doc(storeId)
+              .collection(_collectionProducts)
+              .doc(productId)
+              .update(productData);
+
+          print('✅ Product updated successfully: $productId');
+          return true; // Success - exit retry loop
+        }
+      } catch (e) {
+        print('❌ Firebase saveProduct error (attempt $attempt): $e');
+
+        if (attempt == 3) {
+          // Son deneme de başarısız
+          print('💀 All retry attempts failed for saveProduct');
+          return false;
+        }
+
+        // Exponential backoff - wait before retry
+        final waitTime = Duration(milliseconds: 500 * attempt);
+        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
+        await Future.delayed(waitTime);
+      }
+    }
+
+    return false; // This shouldn't be reached
+  }
+
+  /// Delete product with retry mechanism
+  Future<bool> deleteProduct(String storeId, String productId) async {
+    // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        print(
+            '🔄 Attempt $attempt: Deleting product from Firebase: $productId in store: $storeId');
+
         await _firestore
             .collection(_collectionStores)
             .doc(storeId)
             .collection(_collectionProducts)
             .doc(productId)
-            .update(productData);
-      }
-      return true;
-    } catch (e) {
-      // Debug print removed
-      return false;
-    }
-  }
+            .delete();
 
-  /// Delete product
-  Future<bool> deleteProduct(String storeId, String productId) async {
-    try {
-      await _firestore
-          .collection(_collectionStores)
-          .doc(storeId)
-          .collection(_collectionProducts)
-          .doc(productId)
-          .delete();
-      return true;
-    } catch (e) {
-      // Debug print removed
-      return false;
+        print('✅ Product deleted successfully from Firebase: $productId');
+        return true; // Success - exit retry loop
+      } catch (e) {
+        print('❌ Firebase deleteProduct error (attempt $attempt): $e');
+
+        if (attempt == 3) {
+          // Son deneme de başarısız
+          print('💀 All retry attempts failed for deleteProduct');
+          return false;
+        }
+
+        // Exponential backoff - wait before retry
+        final waitTime = Duration(milliseconds: 500 * attempt);
+        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
+        await Future.delayed(waitTime);
+      }
     }
+
+    return false; // This shouldn't be reached
   }
 
   /// Get sales stream for a store

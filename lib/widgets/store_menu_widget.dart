@@ -510,7 +510,7 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'İlk ay ücretsiz! Sonrasında sadece ₺29.99/ay',
+                      'İlk ay ücretsiz! Sonrasında sadece ₺29999.99/ay',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.amber[800],

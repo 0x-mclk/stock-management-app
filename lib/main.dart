@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,6 +8,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'providers/app_provider.dart';
 import 'providers/product_provider.dart';
+import 'providers/realtime_product_provider.dart';
 import 'providers/sales_provider.dart';
 import 'providers/supplier_provider.dart';
 import 'providers/notification_provider.dart';
@@ -91,6 +91,7 @@ class StockManagementApp extends StatelessWidget {
             return productProvider ?? ProductProvider();
           },
         ),
+        ChangeNotifierProvider(create: (_) => RealtimeProductProvider()),
         ChangeNotifierProvider(create: (_) => SalesProvider()),
         ChangeNotifierProvider(create: (_) => SupplierProvider()),
         ChangeNotifierProvider(create: (_) => ConnectivityService()),

@@ -143,34 +143,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
-              if (offline.hasPendingOperations) ...[
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.sync_problem, color: Colors.orange),
-                  title: const Text('Bekleyen İşlemler'),
-                  subtitle: Text(
-                      '${offline.pendingOperationsCount} işlem senkronize edilmeyi bekliyor'),
-                  trailing: connectivity.isOnline
-                      ? IconButton(
-                          onPressed: () => _showSyncDialog(),
-                          icon: const Icon(Icons.sync),
-                          tooltip: 'Senkronize Et',
-                        )
-                      : const Icon(Icons.wifi_off, color: Colors.grey),
-                ),
-              ],
-              if (offline.hasPendingOperations) ...[
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.storage),
-                  title: const Text('Offline Veri Boyutu'),
-                  subtitle: Text(offline.getDataSizeEstimate()),
-                  trailing: TextButton(
-                    onPressed: () => _showOfflineDataDialog(),
-                    child: const Text('Detay'),
-                  ),
-                ),
-              ],
+              // Real-time sync status - no manual sync button needed
+              ListTile(
+                leading: const Icon(Icons.cloud_sync, color: Colors.green),
+                title: const Text('Real-time Senkronizasyon'),
+                subtitle: connectivity.isOnline
+                    ? const Text('Firebase ile otomatik senkronize ediliyor')
+                    : const Text('Offline - Otomatik senkronize edilecek'),
+                trailing: connectivity.isOnline
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : const Icon(Icons.wifi_off, color: Colors.orange),
+              ),
             ],
           ),
         );
@@ -378,156 +361,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showSyncDialog() {
-    final offline = context.read<OfflineService>();
+  // Manual sync dialogs removed - using automatic real-time sync only
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Veri Senkronizasyonu'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-                '${offline.pendingOperationsCount} işlem senkronize edilecek:'),
-            const SizedBox(height: 16),
-            ...offline.getPendingOperationsSummary().entries.map(
-                  (entry) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      children: [
-                        Icon(_getOperationIcon(entry.key), size: 16),
-                        const SizedBox(width: 8),
-                        Text('${entry.key}: ${entry.value} işlem'),
-                      ],
-                    ),
-                  ),
-                ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await offline.syncPendingOperations();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Senkronizasyon tamamlandı'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-            },
-            child: const Text('Senkronize Et'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showOfflineDataDialog() {
-    final offline = context.read<OfflineService>();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Offline Veri Detayları'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Toplam veri boyutu: ${offline.getDataSizeEstimate()}'),
-            const SizedBox(height: 16),
-            const Text('İşlem türlerine göre dağılım:'),
-            const SizedBox(height: 8),
-            ...offline.getPendingOperationsSummary().entries.map(
-                  (entry) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      children: [
-                        Icon(_getOperationIcon(entry.key), size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(entry.key)),
-                        Text('${entry.value}'),
-                      ],
-                    ),
-                  ),
-                ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Kapat'),
-          ),
-          if (offline.hasPendingOperations)
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _showClearOfflineDataDialog();
-              },
-              child: const Text('Temizle', style: TextStyle(color: Colors.red)),
-            ),
-        ],
-      ),
-    );
-  }
-
-  void _showClearOfflineDataDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Offline Veriyi Temizle'),
-        content: const Text(
-          'Tüm bekleyen işlemler silinecek. Bu işlem geri alınamaz. Emin misiniz?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await context.read<OfflineService>().clearPendingOperations();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Offline veriler temizlendi'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Temizle', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  IconData _getOperationIcon(String operationType) {
-    switch (operationType.toLowerCase()) {
-      case 'sales':
-      case 'satış':
-        return Icons.point_of_sale;
-      case 'products':
-      case 'ürün':
-        return Icons.inventory;
-      case 'suppliers':
-      case 'tedarikçi':
-        return Icons.business;
-      default:
-        return Icons.sync;
-    }
-  }
+  // Manual sync and offline data management removed - using automatic real-time sync
 
   // Placeholder methods for other dialogs
   void _showBusinessInfoDialog() {

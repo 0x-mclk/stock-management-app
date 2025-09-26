@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/product_provider.dart';
 import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/supplier_provider.dart';
@@ -143,8 +142,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSummaryCards(BuildContext context) {
-    return Consumer2<RealtimeProductProvider, ProductProvider>(
-      builder: (context, realtimeProvider, productProvider, child) {
+    return Consumer<RealtimeProductProvider>(
+      builder: (context, realtimeProvider, child) {
         return Consumer<SalesProvider>(
           builder: (context, salesProvider, child) {
             return Consumer<SupplierProvider>(

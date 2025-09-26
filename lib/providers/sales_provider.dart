@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
 import '../services/data_service.dart';
+import '../services/firestore_service.dart'; // ✅ Firebase sales için
 import '../services/store_selection_service.dart';
-import '../services/firebase_sync_service.dart';
-import 'product_provider.dart';
+// import '../services/firebase_sync_service.dart';  // ❌ DEVRE DIŞI
 import 'realtime_product_provider.dart';
 
 class CartItem {
@@ -29,6 +29,7 @@ class SalesProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isInitialized = false;
   final DataService _dataService = DataService();
+  final FirestoreService _firestoreService = FirestoreService.instance;
 
   List<CartItem> get cartItems => _cartItems;
   List<Sale> get sales => _sales;
@@ -58,25 +59,38 @@ class SalesProvider extends ChangeNotifier {
 
   double get finalTotal => cartTotal - _totalDiscount;
 
-  // Initialize and load data from database
+  // Initialize and load data from Firebase
   Future<void> loadSales() async {
     setLoading(true);
     try {
       // Initialize store ID first
       await _initializeStoreId();
 
-      // ✅ Store ID ile filtrelenmiş satışları yükle
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      _sales = await _dataService.loadSalesByStore(storeId,
-          limit: null); // Tüm satışları yükle
+      // ✅ Firebase'den satışları yükle
+      final salesData = await _firestoreService.getSalesByDateRange(
+        storeId: storeId,
+        // Tüm satışları almak için çok geniş tarih aralığı
+        startDate: DateTime(2020, 1, 1),
+        endDate: DateTime.now().add(Duration(days: 1)),
+      );
+
+      print('📊 Firebase raw sales data: ${salesData.length} entries');
+      for (int i = 0; i < salesData.length && i < 3; i++) {
+        print('🔍 Sale $i: ${salesData[i]}');
+      }
+
+      _sales = salesData.map((data) => Sale.fromMap(data)).toList();
+
       _isInitialized = true;
       notifyListeners();
+      print('✅ ${_sales.length} satış Firebase\'den yüklendi');
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ Firebase satışları yükleme hatası: $e');
     } finally {
       setLoading(false);
     }
@@ -174,18 +188,24 @@ class SalesProvider extends ChangeNotifier {
         }
       }
 
-      await _dataService.saveSale(saleWithStore);
+      // ✅ Hem SQLite hem Firestore'a kaydet
+      await _dataService.saveSale(saleWithStore); // Offline cache için
+
+      // ✅ Firebase'e de kaydet
+      final saleData = saleWithStore.toMap();
+      await _firestoreService.addSale(storeId, saleData);
+
       await refreshSales(); // Force refresh to get updated data
 
-      // 🔄 Satış kaydedildikten sonra hemen sync yap
-      print('🔄 Sale saved, triggering immediate sync...');
-      try {
-        await FirebaseSyncService().performFullSync();
-        print('✅ Immediate sync completed after sale');
-      } catch (syncError) {
-        print('⚠️ Immediate sync failed: $syncError');
-        // Sync hata verirse de devam et, auto-sync sonra halleder
-      }
+      // ❌ Firebase Sync DEVRE DIŞI - RealtimeProductProvider kullanıyoruz
+      // print('🔄 Sale saved, triggering immediate sync...');
+      // try {
+      //   await FirebaseSyncService().performFullSync();
+      //   print('✅ Immediate sync completed after sale');
+      // } catch (syncError) {
+      //   print('⚠️ Immediate sync failed: $syncError');
+      //   // Sync hata verirse de devam et, auto-sync sonra halleder
+      // }
     } catch (e) {
       // // Debug print removed // Removed for production
       rethrow;
@@ -285,8 +305,8 @@ class SalesProvider extends ChangeNotifier {
     return totalProfit;
   }
 
-  // Günlük satış kârı hesaplama (eski ProductProvider - backward compatibility)
-  double getDailyProfit(ProductProvider productProvider) {
+  // Günlük satış kârı hesaplama (RealtimeProductProvider ile)
+  double getDailyProfit(RealtimeProductProvider realtimeProductProvider) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = DateTime(now.year, now.month, now.day + 1);
@@ -305,8 +325,8 @@ class SalesProvider extends ChangeNotifier {
 
     for (final sale in todaysSales) {
       for (final item in sale.items) {
-        // Ürünü product provider'dan bul
-        final product = productProvider.products.firstWhere(
+        // Ürünü realtime product provider'dan bul
+        final product = realtimeProductProvider.products.firstWhere(
           (p) => p.id == item.productId,
           orElse: () => Product(
             barcode: item.productBarcode,

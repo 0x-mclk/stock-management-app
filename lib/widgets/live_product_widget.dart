@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../models/product.dart';
 import '../utils/currency_formatter.dart';
 
@@ -37,9 +37,9 @@ class _LiveProductWidgetState extends State<LiveProductWidget> {
               ],
             ),
             const SizedBox(height: 16),
-            Consumer<ProductProvider>(
-              builder: (context, productProvider, child) {
-                final products = productProvider.products;
+            Consumer<RealtimeProductProvider>(
+              builder: (context, realtimeProductProvider, child) {
+                final products = realtimeProductProvider.products;
                 final lowStockProducts =
                     products.where((p) => p.stock < 10).toList();
                 final totalValue = products.fold<double>(

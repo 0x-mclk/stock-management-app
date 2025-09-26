@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/supplier_provider.dart';
 import '../providers/notification_provider.dart';
@@ -510,7 +510,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Reload all providers
       if (mounted) {
-        await context.read<ProductProvider>().loadProducts();
+        await context.read<RealtimeProductProvider>().startRealtimeUpdates();
         await context.read<SalesProvider>().loadSales();
         await context.read<SupplierProvider>().loadSuppliers();
       }

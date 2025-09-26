@@ -3,7 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/product.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 
 class ProductAnalysisScreen extends StatefulWidget {
@@ -56,8 +56,8 @@ class _ProductAnalysisScreenState extends State<ProductAnalysisScreen>
   }
 
   void _searchProductByBarcode(String barcode) {
-    final productProvider = context.read<ProductProvider>();
-    final product = productProvider.products.firstWhere(
+    final realtimeProductProvider = context.read<RealtimeProductProvider>();
+    final product = realtimeProductProvider.products.firstWhere(
       (p) => p.barcode == barcode,
       orElse: () => Product(
         barcode: barcode,
@@ -95,9 +95,9 @@ class _ProductAnalysisScreenState extends State<ProductAnalysisScreen>
       return;
     }
 
-    final productProvider = context.read<ProductProvider>();
+    final realtimeProductProvider = context.read<RealtimeProductProvider>();
     setState(() {
-      _filteredProducts = productProvider.products
+      _filteredProducts = realtimeProductProvider.products
           .where((product) =>
               product.name.toLowerCase().contains(query.toLowerCase()) ||
               product.barcode.contains(query))

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/offline_status_widget.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/supplier_provider.dart';
 import 'main_screen.dart';
@@ -31,8 +31,8 @@ class _SplashScreenState extends State<SplashScreen> {
       // Debug print removed
 
       if (mounted) {
-        final productProvider =
-            Provider.of<ProductProvider>(context, listen: false);
+        final realtimeProductProvider =
+            Provider.of<RealtimeProductProvider>(context, listen: false);
         final salesProvider =
             Provider.of<SalesProvider>(context, listen: false);
         final supplierProvider =
@@ -40,7 +40,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
         // Load all data in parallel for faster initialization
         await Future.wait([
-          productProvider.loadProducts(),
+          realtimeProductProvider.startRealtimeUpdates(),
           salesProvider.loadSales(),
           supplierProvider.loadSuppliers(),
         ]);

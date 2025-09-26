@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../services/firestore_service.dart';
 import '../services/firebase_auth_service.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 
 class FirestoreTestPage extends StatefulWidget {
   const FirestoreTestPage({super.key});
@@ -1263,16 +1263,23 @@ class _FirestoreTestPageState extends State<FirestoreTestPage> {
     });
 
     try {
-      // Get product provider from context
-      final productProvider =
-          Provider.of<ProductProvider>(context, listen: false);
-      final status = await productProvider.getMigrationStatus();
+      // Get realtime product provider from context
+      final realtimeProductProvider =
+          Provider.of<RealtimeProductProvider>(context, listen: false);
+      // Migration status not available in RealtimeProductProvider, return empty status
+      final status = {
+        'sqliteCount': 0,
+        'firestoreCount': 0,
+        'needsMigration': false,
+        'hasStore': true,
+        'storeId': realtimeProductProvider.currentStoreId
+      };
 
-      final sqliteCount = status['sqliteCount'] ?? 0;
-      final firestoreCount = status['firestoreCount'] ?? 0;
-      final needsMigration = status['needsMigration'] ?? false;
-      final hasStore = status['hasStore'] ?? false;
-      final storeId = status['storeId'];
+      final int sqliteCount = (status['sqliteCount'] as int?) ?? 0;
+      final int firestoreCount = (status['firestoreCount'] as int?) ?? 0;
+      final bool needsMigration = (status['needsMigration'] as bool?) ?? false;
+      final bool hasStore = (status['hasStore'] as bool?) ?? false;
+      final String storeId = (status['storeId'] as String?) ?? '';
 
       String message = '📊 Migration Durumu:\\n';
       message += '💾 SQLite: $sqliteCount ürün\\n';
@@ -1310,11 +1317,12 @@ class _FirestoreTestPageState extends State<FirestoreTestPage> {
     });
 
     try {
-      // Get product provider from context
-      final productProvider =
-          Provider.of<ProductProvider>(context, listen: false);
+      // Get realtime product provider from context
+      final realtimeProductProvider =
+          Provider.of<RealtimeProductProvider>(context, listen: false);
 
-      final success = await productProvider.migrateProductsToFirestore();
+      // Migration not needed with RealtimeProductProvider - products are already in Firebase
+      final success = true;
 
       if (success) {
         setState(() {

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
@@ -88,8 +88,8 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // 1. Satış & Kâr Sekmesi
   Widget _buildSalesAndProfitTab() {
-    return Consumer2<SalesProvider, ProductProvider>(
-      builder: (context, salesProvider, productProvider, child) {
+    return Consumer2<SalesProvider, RealtimeProductProvider>(
+      builder: (context, salesProvider, realtimeProductProvider, child) {
         final sales = salesProvider.sales;
 
         if (sales.isEmpty) {
@@ -127,10 +127,10 @@ class _ReportsScreenState extends State<ReportsScreen>
               Expanded(
                 child: TabBarView(
                   children: [
-                    _buildDailyAnalysis(sales, productProvider),
-                    _buildWeeklyAnalysis(sales, productProvider),
-                    _buildMonthlyAnalysis(sales, productProvider),
-                    _buildYearlyAnalysis(sales, productProvider),
+                    _buildDailyAnalysis(sales, realtimeProductProvider),
+                    _buildWeeklyAnalysis(sales, realtimeProductProvider),
+                    _buildMonthlyAnalysis(sales, realtimeProductProvider),
+                    _buildYearlyAnalysis(sales, realtimeProductProvider),
                   ],
                 ),
               ),
@@ -143,7 +143,7 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // Haftalık Ciro & Kâr Analizi
   Widget _buildWeeklyAnalysis(
-      List<Sale> sales, ProductProvider productProvider) {
+      List<Sale> sales, RealtimeProductProvider productProvider) {
     // Son haftanın verilerini hesapla
     final now = DateTime.now();
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
@@ -286,7 +286,7 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // Aylık Ciro & Kâr Analizi
   Widget _buildMonthlyAnalysis(
-      List<Sale> sales, ProductProvider productProvider) {
+      List<Sale> sales, RealtimeProductProvider productProvider) {
     Map<String, double> monthlyRevenue = {};
     Map<String, double> monthlyProfit = {};
 
@@ -431,7 +431,7 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // Yıllık Ciro & Kâr Analizi
   Widget _buildYearlyAnalysis(
-      List<Sale> sales, ProductProvider productProvider) {
+      List<Sale> sales, RealtimeProductProvider productProvider) {
     Map<String, double> yearlyRevenue = {};
     Map<String, double> yearlyProfit = {};
 
@@ -598,7 +598,7 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // Seçili Gün Analizi
   Widget _buildDailyAnalysis(
-      List<Sale> sales, ProductProvider productProvider) {
+      List<Sale> sales, RealtimeProductProvider productProvider) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -652,7 +652,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   }
 
   Widget _buildSelectedDayAnalysis(
-      List<Sale> sales, ProductProvider productProvider) {
+      List<Sale> sales, RealtimeProductProvider productProvider) {
     // Seçili güne ait satışları filtrele
     final selectedDaySales = sales.where((sale) {
       final saleDate = sale.createdAt;
@@ -883,7 +883,8 @@ class _ReportsScreenState extends State<ReportsScreen>
   }
 
   // Kâr hesaplama yardımcı fonksiyonu
-  double _calculateSaleProfit(Sale sale, ProductProvider productProvider) {
+  double _calculateSaleProfit(
+      Sale sale, RealtimeProductProvider productProvider) {
     double totalProfit = 0;
 
     // Eğer items boşsa 0 döndür (eski satışlar için)
@@ -953,7 +954,7 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // 2. Ürün Analizi Sekmesi
   Widget _buildProductAnalysisTab() {
-    return Consumer2<ProductProvider, SalesProvider>(
+    return Consumer2<RealtimeProductProvider, SalesProvider>(
       builder: (context, productProvider, salesProvider, child) {
         final products = productProvider.products;
         final sales = salesProvider.sales;
@@ -1157,7 +1158,7 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // 3. Stok Analizi Sekmesi
   Widget _buildStockAnalysisTab() {
-    return Consumer2<ProductProvider, SalesProvider>(
+    return Consumer2<RealtimeProductProvider, SalesProvider>(
       builder: (context, productProvider, salesProvider, child) {
         final products = productProvider.products;
         final sales = salesProvider.sales;
@@ -2056,7 +2057,7 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // 4. Satış Listesi Sekmesi
   Widget _buildSalesListTab() {
-    return Consumer2<SalesProvider, ProductProvider>(
+    return Consumer2<SalesProvider, RealtimeProductProvider>(
       builder: (context, salesProvider, productProvider, child) {
         final allSales = salesProvider.sales;
 

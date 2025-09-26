@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/product_provider.dart';
 import '../providers/realtime_product_provider.dart';
 import '../models/product.dart';
 import '../utils/currency_formatter.dart';
@@ -477,7 +476,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             child: const Text('İptal'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (nameController.text.trim().isEmpty ||
                   barcodeController.text.trim().isEmpty ||
                   salePriceController.text.trim().isEmpty) {
@@ -502,20 +501,38 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 storeId: '', // ✅ Provider otomatik atayacak
               );
 
+              bool success;
               if (isEditing) {
-                context.read<ProductProvider>().updateProduct(newProduct);
+                success = await context
+                    .read<RealtimeProductProvider>()
+                    .updateProduct(newProduct);
               } else {
-                context.read<ProductProvider>().addProduct(newProduct);
+                success = await context
+                    .read<RealtimeProductProvider>()
+                    .addProduct(newProduct);
               }
 
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content:
-                      Text(isEditing ? 'Ürün güncellendi' : 'Ürün eklendi'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+
+              if (success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(isEditing
+                        ? 'Ürün başarıyla güncellendi'
+                        : 'Ürün başarıyla eklendi'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(isEditing
+                        ? 'Ürün güncellenirken hata oluştu'
+                        : 'Ürün eklenirken hata oluştu'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             child: Text(isEditing ? 'Güncelle' : 'Ekle'),
           ),
@@ -594,7 +611,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             child: const Text('İptal'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (stockController.text.trim().isEmpty) return;
 
               final addAmount = int.tryParse(stockController.text) ?? 0;
@@ -604,14 +621,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 stock: product.stock + addAmount,
               );
 
-              context.read<ProductProvider>().updateProduct(updatedProduct);
+              final success = await context
+                  .read<RealtimeProductProvider>()
+                  .updateProduct(updatedProduct);
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('$addAmount adet stok eklendi'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+              if (success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('$addAmount adet stok eklendi'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Stok güncellenemedi'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             child: const Text('Ekle'),
           ),
@@ -638,7 +666,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       Sheet sheet = excel.tables.values.first;
 
       final productProvider =
-          Provider.of<ProductProvider>(context, listen: false);
+          Provider.of<RealtimeProductProvider>(context, listen: false);
       int importedCount = 0;
       int errorCount = 0;
 
@@ -679,18 +707,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
             storeId: '', // ✅ Provider otomatik atayacak
           );
 
-          await productProvider.addProduct(product);
-          importedCount++;
-          // // Debug print removed // Removed for production // Debug
+          final success = await productProvider.addProduct(product);
+          if (success) {
+            importedCount++;
+          } else {
+            errorCount++;
+          }
         } catch (e) {
-          // // Debug print removed // Removed for production // Debug
           errorCount++;
         }
       }
 
-      // Import sonrası ürün listesini yeniden yükle
-      await productProvider.loadProducts();
-      // Debug print removed // Debug
+      // RealtimeProductProvider otomatik günceller, loadProducts() gereksiz
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -709,7 +737,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   Future<void> _exportToExcel() async {
     try {
       final productProvider =
-          Provider.of<ProductProvider>(context, listen: false);
+          Provider.of<RealtimeProductProvider>(context, listen: false);
       final products = productProvider.products;
 
       // // Debug print removed // Removed for production // Debug

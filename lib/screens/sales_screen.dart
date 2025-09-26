@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
@@ -28,10 +28,10 @@ class _SalesScreenState extends State<SalesScreen> {
     super.initState();
     // Ensure products and sales are loaded when screen opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final productProvider =
-          Provider.of<ProductProvider>(context, listen: false);
+      final realtimeProductProvider =
+          Provider.of<RealtimeProductProvider>(context, listen: false);
       final salesProvider = Provider.of<SalesProvider>(context, listen: false);
-      productProvider.loadProducts();
+      realtimeProductProvider.startRealtimeUpdates(); // Real-time başlat
       salesProvider.loadSales();
     });
   }
@@ -416,7 +416,8 @@ class _SalesScreenState extends State<SalesScreen> {
 
         // Satış Tamamla Butonu
         ElevatedButton(
-          onPressed: cartItems.isEmpty ? null : () => _completeSale(total),
+          onPressed:
+              cartItems.isEmpty ? null : () async => await _completeSale(total),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green,
             foregroundColor: Colors.white,
@@ -491,7 +492,7 @@ class _SalesScreenState extends State<SalesScreen> {
               const SizedBox(height: 16),
               SizedBox(
                 height: 300,
-                child: Consumer<ProductProvider>(
+                child: Consumer<RealtimeProductProvider>(
                   builder: (context, productProvider, child) {
                     final filteredProducts = productProvider.products
                         .where((product) => product.name
@@ -534,7 +535,7 @@ class _SalesScreenState extends State<SalesScreen> {
   void _addProductByBarcode(String barcode) {
     if (barcode.trim().isEmpty) return;
 
-    final productProvider = context.read<ProductProvider>();
+    final productProvider = context.read<RealtimeProductProvider>();
     final product =
         productProvider.products.where((p) => p.barcode == barcode).firstOrNull;
 
@@ -619,7 +620,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  void _completeSale(double total) {
+  Future<void> _completeSale(double total) async {
     // // Debug print removed // Removed for production
     // // Debug print removed // Removed for production
 
@@ -648,17 +649,24 @@ class _SalesScreenState extends State<SalesScreen> {
     // Satış işlemini kaydet
     context.read<SalesProvider>().addSale(sale);
 
-    // Stokları güncelle
-    final productProvider = context.read<ProductProvider>();
+    // Stokları güncelle - RealtimeProductProvider kullan
+    final productProvider = context.read<RealtimeProductProvider>();
     for (final item in cartItems) {
       final product = productProvider.products
           .where((p) => p.id == item.productId)
           .firstOrNull;
       if (product != null) {
-        final updatedProduct = product.copyWith(
-          stock: product.stock - item.quantity,
-        );
-        productProvider.updateProduct(updatedProduct);
+        final newStock = product.stock - item.quantity;
+
+        if (newStock <= 0) {
+          // ✅ Stok sıfır veya negatif ise ürünü sil
+          print('🗑️ Stok sıfırlandı, ürün siliniyor: ${product.name}');
+          await productProvider.deleteProduct(product.id.toString());
+        } else {
+          // ✅ Stok pozitif ise güncelle
+          final updatedProduct = product.copyWith(stock: newStock);
+          await productProvider.updateProduct(updatedProduct);
+        }
       }
     }
 

@@ -7,7 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'providers/app_provider.dart';
-import 'providers/product_provider.dart';
+//import 'providers/product_provider.dart';
 import 'providers/realtime_product_provider.dart';
 import 'providers/sales_provider.dart';
 import 'providers/supplier_provider.dart';
@@ -15,10 +15,10 @@ import 'providers/notification_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
-import 'services/database_service.dart';
+import 'services/database_service.dart'; // ✅ Firebase uyumlu SQLite
 import 'services/notification_service.dart';
 import 'services/connectivity_service.dart';
-import 'services/offline_service.dart';
+import 'services/offline_service.dart'; // ✅ Firebase uyumlu offline service
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,7 +53,7 @@ void main() async {
   // Initialize services (web'de database ve notification servisleri çalışmaz)
   if (!kIsWeb) {
     try {
-      // Initialize database first
+      // ✅ Firebase uyumlu SQLite database başlatılıyor
       await DatabaseService.instance.database;
 
       // Initialize notification service
@@ -62,7 +62,7 @@ void main() async {
       // Initialize connectivity and offline services (non-blocking)
       ConnectivityService().initialize();
 
-      // Load pending operations in background
+      // ✅ Firebase uyumlu offline service başlatılıyor
       OfflineService().loadPendingOperations().catchError((error) {
         // Debug: print('Error loading pending operations: $error');
       });
@@ -84,18 +84,13 @@ class StockManagementApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AppProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
-        ChangeNotifierProxyProvider<NotificationProvider, ProductProvider>(
-          create: (_) => ProductProvider(),
-          update: (_, notificationProvider, productProvider) {
-            productProvider?.setNotificationProvider(notificationProvider);
-            return productProvider ?? ProductProvider();
-          },
-        ),
         ChangeNotifierProvider(create: (_) => RealtimeProductProvider()),
         ChangeNotifierProvider(create: (_) => SalesProvider()),
         ChangeNotifierProvider(create: (_) => SupplierProvider()),
         ChangeNotifierProvider(create: (_) => ConnectivityService()),
-        ChangeNotifierProvider(create: (_) => OfflineService()),
+        ChangeNotifierProvider(
+            create: (_) =>
+                OfflineService()), // ✅ Firebase uyumlu offline service
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {

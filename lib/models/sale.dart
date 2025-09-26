@@ -43,6 +43,7 @@ class Sale {
       'discount': discount,
       'final_amount': finalAmount,
       'payment_method': paymentMethod.name,
+      'items': items.map((item) => item.toMap()).toList(), // ✅ Items eklendi
       'created_at': createdAt.toIso8601String(),
       'is_printed': isPrinted ? 1 : 0,
     };
@@ -62,12 +63,17 @@ class Sale {
         (e) => e.name == (map['payment_method'] ?? map['paymentMethod']),
         orElse: () => PaymentMethod.cash,
       ),
-      items: [], // Will be loaded separately
+      items: (map['items'] as List<dynamic>?)
+              ?.map((item) => SaleItem.fromMap(item as Map<String, dynamic>))
+              .toList() ??
+          [], // ✅ Items mapping eklendi
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'])
           : (map['createdAt'] != null
               ? (map['createdAt'] as Timestamp).toDate()
-              : DateTime.now()),
+              : (map['saleDate'] != null
+                  ? (map['saleDate'] as Timestamp).toDate()
+                  : DateTime.now())),
       isPrinted: (map['is_printed'] ?? map['isPrinted'] ?? 0) == 1,
     );
   }

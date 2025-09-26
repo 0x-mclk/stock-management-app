@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 
 class QRProductAnalysisScreen extends StatefulWidget {
@@ -82,12 +82,12 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
   }
 
   void _findProductByBarcode(String barcode) {
-    final productProvider =
-        Provider.of<ProductProvider>(context, listen: false);
+    final realtimeProductProvider =
+        Provider.of<RealtimeProductProvider>(context, listen: false);
     final salesProvider = Provider.of<SalesProvider>(context, listen: false);
 
     try {
-      final product = productProvider.products.firstWhere(
+      final product = realtimeProductProvider.products.firstWhere(
         (p) => p.barcode.toLowerCase() == barcode.toLowerCase(),
       );
 
@@ -129,10 +129,10 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
       return;
     }
 
-    final productProvider =
-        Provider.of<ProductProvider>(context, listen: false);
+    final realtimeProductProvider =
+        Provider.of<RealtimeProductProvider>(context, listen: false);
     setState(() {
-      _filteredProducts = productProvider.products
+      _filteredProducts = realtimeProductProvider.products
           .where((product) =>
               product.name.toLowerCase().contains(query.toLowerCase()) ||
               product.barcode.contains(query))

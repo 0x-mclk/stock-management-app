@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../models/product.dart';
 import 'barcode_scanner_screen.dart';
 
@@ -58,8 +58,10 @@ class _PriceCheckScreenState extends State<PriceCheckScreen> {
       _foundProduct = null;
     });
 
-    final productProvider = context.read<ProductProvider>();
-    final product = productProvider.getProductByBarcode(barcode);
+    final realtimeProductProvider = context.read<RealtimeProductProvider>();
+    final product = realtimeProductProvider.products
+        .where((p) => p.barcode == barcode)
+        .firstOrNull;
 
     setState(() {
       _isSearching = false;
@@ -229,9 +231,9 @@ class _PriceCheckScreenState extends State<PriceCheckScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              Consumer<ProductProvider>(
-                builder: (context, productProvider, child) {
-                  final filteredProducts = productProvider.products
+              Consumer<RealtimeProductProvider>(
+                builder: (context, realtimeProductProvider, child) {
+                  final filteredProducts = realtimeProductProvider.products
                       .where((product) =>
                           product.name.toLowerCase().contains(_searchQuery))
                       .toList();
@@ -432,7 +434,3 @@ class _PriceCheckScreenState extends State<PriceCheckScreen> {
     );
   }
 }
-
-
-
-

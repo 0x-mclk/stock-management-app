@@ -17,6 +17,12 @@ class FirestoreService {
   /// Add or update product with retry mechanism
   Future<bool> saveProduct(String storeId, String? productId,
       Map<String, dynamic> productData) async {
+    // ✅ StoreId validation
+    if (storeId.isEmpty) {
+      print('❌ SAVEPRODUCT FAILED: StoreId is empty!');
+      return false;
+    }
+
     // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -1282,11 +1288,10 @@ class FirestoreService {
           .collection(_collectionStores)
           .doc(storeId)
           .collection('sales')
-          .where('isActive', isEqualTo: true)
-          .where('createdAt',
+          .where('saleDate',
               isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
-          .orderBy('createdAt', descending: true)
+          .where('saleDate', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+          .orderBy('saleDate', descending: true)
           .get();
 
       return querySnapshot.docs.map((doc) {

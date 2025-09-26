@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../models/product.dart';
 
 class AddProductWithCameraScreen extends StatefulWidget {
@@ -66,8 +66,8 @@ class _AddProductWithCameraScreenState
         HapticFeedback.lightImpact();
 
         // Mevcut ürünü kontrol et
-        final productProvider = context.read<ProductProvider>();
-        final existingProducts = productProvider.products
+        final realtimeProductProvider = context.read<RealtimeProductProvider>();
+        final existingProducts = realtimeProductProvider.products
             .where(
               (product) => product.barcode == code,
             )
@@ -167,8 +167,8 @@ class _AddProductWithCameraScreenState
   void _onBarcodeManuallyEntered(String value) async {
     if (value.trim().isNotEmpty && value.trim().length >= 8) {
       // Manuel girilen barkod için mevcut ürünü kontrol et
-      final productProvider = context.read<ProductProvider>();
-      final existingProducts = productProvider.products
+      final realtimeProductProvider = context.read<RealtimeProductProvider>();
+      final existingProducts = realtimeProductProvider.products
           .where(
             (product) => product.barcode == value.trim(),
           )
@@ -239,8 +239,8 @@ class _AddProductWithCameraScreenState
 
     try {
       // Aynı barkodlu ürün var mı kontrol et
-      final productProvider = context.read<ProductProvider>();
-      final existingProducts = productProvider.products
+      final realtimeProductProvider = context.read<RealtimeProductProvider>();
+      final existingProducts = realtimeProductProvider.products
           .where(
             (product) => product.barcode == _barcodeController.text.trim(),
           )
@@ -264,7 +264,7 @@ class _AddProductWithCameraScreenState
           storeId: existingProduct.storeId, // ✅ Mevcut store ID'yi koru
         );
 
-        await productProvider.updateProduct(updatedProduct);
+        await realtimeProductProvider.updateProduct(updatedProduct);
 
         if (mounted) {
           Navigator.pop(context);
@@ -291,7 +291,7 @@ class _AddProductWithCameraScreenState
           storeId: '', // ✅ Provider otomatik atayacak
         );
 
-        await productProvider.addProduct(product);
+        await realtimeProductProvider.addProduct(product);
 
         if (mounted) {
           Navigator.pop(context);

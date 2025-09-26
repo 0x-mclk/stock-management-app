@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../providers/sales_provider.dart';
-import '../providers/product_provider.dart';
+import '../providers/realtime_product_provider.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
 
@@ -403,18 +403,20 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // 2. Ürün Analizi
   Widget _buildProductAnalysis() {
-    return Consumer2<SalesProvider, ProductProvider>(
-      builder: (context, salesProvider, productProvider, child) {
+    return Consumer2<SalesProvider, RealtimeProductProvider>(
+      builder: (context, salesProvider, realtimeProductProvider, child) {
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildTopSellingProducts(salesProvider, productProvider),
+              _buildTopSellingProducts(salesProvider, realtimeProductProvider),
               const SizedBox(height: 20),
-              _buildMostProfitableProducts(salesProvider, productProvider),
+              _buildMostProfitableProducts(
+                  salesProvider, realtimeProductProvider),
               const SizedBox(height: 20),
-              _buildLeastSellingProducts(salesProvider, productProvider),
+              _buildLeastSellingProducts(
+                  salesProvider, realtimeProductProvider),
             ],
           ),
         );
@@ -423,7 +425,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   }
 
   Widget _buildTopSellingProducts(
-      SalesProvider salesProvider, ProductProvider productProvider) {
+      SalesProvider salesProvider, RealtimeProductProvider productProvider) {
     final topProducts =
         _getTopSellingProducts(salesProvider.sales, productProvider.products);
 
@@ -453,7 +455,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   }
 
   Widget _buildMostProfitableProducts(
-      SalesProvider salesProvider, ProductProvider productProvider) {
+      SalesProvider salesProvider, RealtimeProductProvider productProvider) {
     final profitableProducts = _getMostProfitableProducts(
         salesProvider.sales, productProvider.products);
 
@@ -483,7 +485,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   }
 
   Widget _buildLeastSellingProducts(
-      SalesProvider salesProvider, ProductProvider productProvider) {
+      SalesProvider salesProvider, RealtimeProductProvider productProvider) {
     final leastProducts =
         _getLeastSellingProducts(salesProvider.sales, productProvider.products);
 
@@ -514,7 +516,7 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // 3. Stok Analizi
   Widget _buildStockAnalysis() {
-    return Consumer<ProductProvider>(
+    return Consumer<RealtimeProductProvider>(
       builder: (context, productProvider, child) {
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -533,7 +535,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  Widget _buildStockKPICards(ProductProvider productProvider) {
+  Widget _buildStockKPICards(RealtimeProductProvider productProvider) {
     final totalProducts = productProvider.products.length;
     final totalStock = productProvider.products
         .fold<int>(0, (sum, product) => sum + product.stock);
@@ -571,7 +573,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  Widget _buildLowStockProducts(ProductProvider productProvider) {
+  Widget _buildLowStockProducts(RealtimeProductProvider productProvider) {
     final lowStockProducts = productProvider.products
         .where((p) => p.stock > 0 && p.stock <= 10)
         .toList();
@@ -613,7 +615,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  Widget _buildOutOfStockProducts(ProductProvider productProvider) {
+  Widget _buildOutOfStockProducts(RealtimeProductProvider productProvider) {
     final outOfStockProducts =
         productProvider.products.where((p) => p.stock == 0).toList();
 
@@ -880,7 +882,3 @@ class ProductAnalysisData {
     required this.totalProfit,
   });
 }
-
-
-
-

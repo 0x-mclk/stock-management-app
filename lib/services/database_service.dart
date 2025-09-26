@@ -26,17 +26,17 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 9, // ✅ Versiyonu artırdık - store_id sütunları için
+      version: 10, // ✅ Firebase uyumlu ID formatı için versiyon artırıldı
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    // Products table
+    // Products table - Firebase uyumlu ID formatı
     await db.execute('''
       CREATE TABLE products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
         barcode TEXT UNIQUE NOT NULL,
         name TEXT NOT NULL,
         description TEXT,
@@ -52,10 +52,10 @@ class DatabaseService {
       )
     ''');
 
-    // Sales table
+    // Sales table - Firebase uyumlu ID formatı
     await db.execute('''
       CREATE TABLE sales (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
         supplier_id TEXT,
         total_amount REAL NOT NULL,
         discount REAL DEFAULT 0,
@@ -67,11 +67,11 @@ class DatabaseService {
       )
     ''');
 
-    // Sale items table
+    // Sale items table - Firebase uyumlu ID formatı
     await db.execute('''
       CREATE TABLE sale_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sale_id INTEGER NOT NULL,
+        id TEXT PRIMARY KEY,
+        sale_id TEXT NOT NULL,
         product_id TEXT NOT NULL,
         product_name TEXT NOT NULL,
         product_barcode TEXT,
@@ -230,6 +230,18 @@ class DatabaseService {
           'CREATE INDEX idx_suppliers_store_id ON suppliers(store_id)');
 
       // // Debug print removed // Removed for production
+    }
+    if (oldVersion < 10) {
+      // ✅ Migration to Firebase-compatible ID format
+      // Bu migration mevcut verileri temizler ve yeni formatla başlar
+      await db.delete('payment_history');
+      await db.delete('transaction_history');
+      await db.delete('sale_items');
+      await db.delete('sales');
+      await db.delete('suppliers');
+      await db.delete('products');
+
+      print('🔄 SQLite tabloları Firebase uyumlu ID formatına geçirildi');
     }
   }
 

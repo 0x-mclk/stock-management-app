@@ -163,11 +163,18 @@ class SalesProvider extends ChangeNotifier {
 
   Future<void> addSale(Sale sale) async {
     try {
-      // ✅ Store ID'sini otomatik ata ve doğrula
+      // ✅ Store ID'sini initialize et (eğer yoksa)
+      if (_currentStoreId == null || _currentStoreId!.isEmpty) {
+        await _initializeStoreId();
+      }
+
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
-        throw Exception('Kullanıcı giriş yapmamış');
+        print('❌ Store ID boş! StoreSelectionService durumu kontrol edilecek');
+        throw Exception('Kullanıcı giriş yapmamış veya store ID alınamadı');
       }
+
+      print('✅ Store ID: $storeId, Satış kaydediliyor...');
 
       // ✅ Store ID'si boş olan satışlara store ID ata
       final saleWithStore =
@@ -191,11 +198,13 @@ class SalesProvider extends ChangeNotifier {
       // ✅ Hem SQLite hem Firestore'a kaydet
       await _dataService.saveSale(saleWithStore); // Offline cache için
 
-      // ✅ Firebase'e de kaydet
-      final saleData = saleWithStore.toMap();
+      // ✅ Firebase'e de kaydet (items dahil)
+      final saleData = saleWithStore.toMapForFirebase();
       await _firestoreService.addSale(storeId, saleData);
 
       await refreshSales(); // Force refresh to get updated data
+
+      print('✅ Satış başarıyla kaydedildi - ID: ${saleWithStore.id}');
 
       // ❌ Firebase Sync DEVRE DIŞI - RealtimeProductProvider kullanıyoruz
       // print('🔄 Sale saved, triggering immediate sync...');
@@ -207,7 +216,9 @@ class SalesProvider extends ChangeNotifier {
       //   // Sync hata verirse de devam et, auto-sync sonra halleder
       // }
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ Satış kaydetme hatası: $e');
+      print('📝 Sale data: ${sale.toMap()}');
+      print('🏪 Store ID: $_currentStoreId');
       rethrow;
     }
   }

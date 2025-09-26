@@ -34,19 +34,27 @@ class Sale {
             finalAmount ?? (totalAmount - (totalAmount * discount / 100)),
         createdAt = createdAt ?? DateTime.now();
 
+  // SQLite için (items hariç)
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'store_id': storeId, // ✅ Store ID eklendi
+      'store_id': storeId,
       'supplier_id': supplierId,
       'total_amount': totalAmount,
       'discount': discount,
       'final_amount': finalAmount,
       'payment_method': paymentMethod.name,
-      'items': items.map((item) => item.toMap()).toList(), // ✅ Items eklendi
       'created_at': createdAt.toIso8601String(),
       'is_printed': isPrinted ? 1 : 0,
+      // 'items' field'ı SQLite için çıkarıldı - sale_items tablosunda tutuluyor
     };
+  }
+
+  // Firebase için (items dahil)
+  Map<String, dynamic> toMapForFirebase() {
+    final map = toMap();
+    map['items'] = items.map((item) => item.toMap()).toList();
+    return map;
   }
 
   factory Sale.fromMap(Map<String, dynamic> map) {

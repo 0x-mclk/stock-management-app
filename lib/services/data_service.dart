@@ -277,7 +277,8 @@ class DataService {
         }
       }
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ DataService saveSale hatası: $e');
+      print('📝 Sale toMap: ${sale.toMap()}');
       rethrow;
     }
   }

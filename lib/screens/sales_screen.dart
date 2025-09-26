@@ -695,39 +695,59 @@ class _SalesScreenState extends State<SalesScreen> {
 
     // // Debug print removed // Removed for production
 
-    // Satış işlemini kaydet
-    context.read<SalesProvider>().addSale(sale);
+    try {
+      // Satış işlemini kaydet
+      await context.read<SalesProvider>().addSale(sale);
 
-    // Stokları güncelle - RealtimeProductProvider kullan
-    final productProvider = context.read<RealtimeProductProvider>();
-    for (final item in cartItems) {
-      final product = productProvider.products
-          .where((p) => p.id == item.productId)
-          .firstOrNull;
-      if (product != null) {
-        final newStock = product.stock - item.quantity;
+      print('✅ Satış başarıyla tamamlandı!');
 
-        // ✅ Stok sıfır olsa bile ürünü silme, sadece 0 yap
-        final finalStock =
-            newStock < 0 ? 0 : newStock; // Negatif olmasını engelle
-        final updatedProduct = product.copyWith(stock: finalStock);
-        await productProvider.updateProduct(updatedProduct);
+      // Stokları güncelle - RealtimeProductProvider kullan
+      final productProvider = context.read<RealtimeProductProvider>();
+      for (final item in cartItems) {
+        final product = productProvider.products
+            .where((p) => p.id == item.productId)
+            .firstOrNull;
+        if (product != null) {
+          final newStock = product.stock - item.quantity;
 
-        if (finalStock == 0) {
-          print('⚠️ ${product.name} ürününün stoku sıfırlandı');
+          // ✅ Stok sıfır olsa bile ürünü silme, sadece 0 yap
+          final finalStock =
+              newStock < 0 ? 0 : newStock; // Negatif olmasını engelle
+          final updatedProduct = product.copyWith(stock: finalStock);
+          await productProvider.updateProduct(updatedProduct);
+
+          if (finalStock == 0) {
+            print('⚠️ ${product.name} ürününün stoku sıfırlandı');
+          }
         }
       }
+
+      // Sepeti temizle
+      setState(() {
+        cartItems.clear();
+        discount = 0.0;
+        _discountController.clear();
+      });
+
+      // Başarı mesajı göster
+      _showSaleCompleteDialog(sale);
+    } catch (e) {
+      print('❌ Satış tamamlama hatası: $e');
+
+      // Kullanıcıya hata mesajı göster
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Satış kaydedilemedi: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'Tekrar Dene',
+            textColor: Colors.white,
+            onPressed: () => _completeSale(total),
+          ),
+        ),
+      );
     }
-
-    // Sepeti temizle
-    setState(() {
-      cartItems.clear();
-      discount = 0.0;
-      _discountController.clear();
-    });
-
-    // Başarı mesajı göster
-    _showSaleCompleteDialog(sale);
   }
 
   void _showSaleCompleteDialog(Sale sale) {

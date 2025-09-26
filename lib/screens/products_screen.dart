@@ -452,6 +452,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly, // Sadece rakam
+                      ],
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -489,6 +492,65 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 return;
               }
 
+              // ✅ Fiyat mantık kontrolü
+              final salePrice = double.parse(salePriceController.text);
+              final purchasePrice =
+                  double.tryParse(purchasePriceController.text) ?? 0;
+
+              if (purchasePrice > 0 && purchasePrice >= salePrice) {
+                final shouldContinue = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text('⚠️ Fiyat Uyarısı'),
+                    content: Text(
+                        'Alış fiyatı (₺${purchasePrice.toStringAsFixed(2)}) '
+                        'satış fiyatından (₺${salePrice.toStringAsFixed(2)}) '
+                        'yüksek veya eşit!\n\n'
+                        'Bu durumda zarar edeceksiniz. Devam etmek istiyor musunuz?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: Text('İptal'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: Text('Devam Et'),
+                        style:
+                            TextButton.styleFrom(foregroundColor: Colors.red),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (shouldContinue != true) {
+                  return; // İşlemi iptal et
+                }
+              }
+
+              // ✅ Stok kontrolü - Negatif stok engelleme
+              final stock = int.parse(stockController.text);
+              final minStock = int.parse(minStockController.text);
+
+              if (stock < 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('❌ Stok miktarı negatif olamaz!'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              if (minStock < 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('❌ Minimum stok miktarı negatif olamaz!'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
               final newProduct = Product(
                 id: product?.id, // Yeni ürün için null olacak
                 name: nameController.text.trim(),
@@ -496,8 +558,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 salePrice: double.parse(salePriceController.text),
                 purchasePrice:
                     double.tryParse(purchasePriceController.text) ?? 0,
-                stock: int.parse(stockController.text),
-                minStock: int.parse(minStockController.text),
+                stock: stock,
+                minStock: minStock,
                 storeId: '', // ✅ Provider otomatik atayacak
               );
 
@@ -615,7 +677,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
               if (stockController.text.trim().isEmpty) return;
 
               final addAmount = int.tryParse(stockController.text) ?? 0;
-              if (addAmount <= 0) return;
+              if (addAmount <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('❌ Eklenecek miktar pozitif olmalıdır!'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
 
               final updatedProduct = product.copyWith(
                 stock: product.stock + addAmount,
@@ -669,6 +739,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
           Provider.of<RealtimeProductProvider>(context, listen: false);
       int importedCount = 0;
       int errorCount = 0;
+      int priceErrorCount = 0; // ✅ Fiyat hatası sayacı
+      List<String> priceErrorProducts = []; // ✅ Fiyat hatası olan ürünler
 
       // İlk satır başlık olduğu için 1'den başla
       for (int i = 1; i < sheet.rows.length; i++) {
@@ -691,6 +763,24 @@ class _ProductsScreenState extends State<ProductsScreen> {
           if (name.isEmpty || salePrice <= 0) {
             errorCount++;
             continue;
+          }
+
+          // ✅ Fiyat mantık kontrolü - Excel import için
+          if (purchasePrice > 0 && purchasePrice >= salePrice) {
+            print(
+                '⚠️ Excel Import Uyarısı: $name - Alış fiyatı (₺$purchasePrice) satış fiyatından (₺$salePrice) yüksek/eşit!');
+            priceErrorCount++;
+            priceErrorProducts.add(name);
+            errorCount++;
+            continue; // Bu ürünü atla
+          }
+
+          // ✅ Stok kontrolü - Excel import için negatif stok engelleme
+          if (stock < 0 || minStock < 0) {
+            print(
+                '⚠️ Excel Import Uyarısı: $name - Negatif stok değeri! Stok: $stock, Min Stok: $minStock');
+            errorCount++;
+            continue; // Bu ürünü atla
           }
 
           // Ürün oluştur
@@ -720,13 +810,56 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
       // RealtimeProductProvider otomatik günceller, loadProducts() gereksiz
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              '$importedCount ürün başarıyla içe aktarıldı. $errorCount hata.'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      // ✅ Detaylı sonuç mesajı
+      String message = '✅ $importedCount ürün başarıyla içe aktarıldı';
+      if (errorCount > 0) {
+        message += '\n❌ $errorCount hata';
+        if (priceErrorCount > 0) {
+          message += '\n⚠️ $priceErrorCount fiyat hatası (alış ≥ satış)';
+        }
+      }
+
+      if (priceErrorCount > 0) {
+        // Fiyat hatası detayları için dialog göster
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('⚠️ Import Sonucu'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(message),
+                  if (priceErrorProducts.isNotEmpty) ...[
+                    SizedBox(height: 10),
+                    Text('Fiyat hatası olan ürünler:',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    ...priceErrorProducts.take(5).map((name) =>
+                        Text('• $name', style: TextStyle(fontSize: 12))),
+                    if (priceErrorProducts.length > 5)
+                      Text(
+                          '... ve ${priceErrorProducts.length - 5} diğer ürün'),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Tamam'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Hata: $e')),

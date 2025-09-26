@@ -277,17 +277,74 @@ class _AddProductWithCameraScreenState
         }
       } else {
         // Yeni ürün ekle
+        // ✅ Fiyat kontrolü
+        final salePrice = double.tryParse(_salePriceController.text) ?? 0.0;
+        final purchasePrice = _purchasePriceController.text.trim().isEmpty
+            ? null
+            : double.tryParse(_purchasePriceController.text);
+
+        if (purchasePrice != null && purchasePrice >= salePrice) {
+          final shouldContinue = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('⚠️ Fiyat Uyarısı'),
+              content: Text(
+                  'Alış fiyatı (₺${purchasePrice.toStringAsFixed(2)}) '
+                  'satış fiyatından (₺${salePrice.toStringAsFixed(2)}) '
+                  'yüksek veya eşit!\n\n'
+                  'Bu durumda zarar edeceksiniz. Devam etmek istiyor musunuz?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text('İptal'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text('Devam Et'),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldContinue != true) {
+            return; // İşlemi iptal et
+          }
+        }
+
+        // ✅ Stok kontrolü - Negatif stok engelleme
+        final stock = int.tryParse(_stockController.text) ?? 0;
+        final minStock = int.tryParse(_minStockController.text) ?? 5;
+
+        if (stock < 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Stok miktarı negatif olamaz!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        if (minStock < 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Minimum stok miktarı negatif olamaz!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
         final product = Product(
           name: _nameController.text.trim(),
           barcode: _barcodeController.text.trim(),
-          salePrice: double.tryParse(_salePriceController.text) ?? 0.0,
-          purchasePrice: _purchasePriceController.text.trim().isEmpty
-              ? null
-              : double.tryParse(_purchasePriceController.text),
-          stock: int.tryParse(_stockController.text) ?? 0,
+          salePrice: salePrice,
+          purchasePrice: purchasePrice,
+          stock: stock,
           description: null,
           category: null,
-          minStock: int.tryParse(_minStockController.text) ?? 5,
+          minStock: minStock,
           storeId: '', // ✅ Provider otomatik atayacak
         );
 
@@ -542,6 +599,9 @@ class _AddProductWithCameraScreenState
                       prefixIcon: Icon(Icons.inventory),
                     ),
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly, // Sadece rakam
+                    ],
                   ),
                   const SizedBox(height: 16),
 
@@ -555,6 +615,9 @@ class _AddProductWithCameraScreenState
                       hintText: '5',
                     ),
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly, // Sadece rakam
+                    ],
                   ),
                   const SizedBox(height: 24),
 

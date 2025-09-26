@@ -569,10 +569,36 @@ class _SalesScreenState extends State<SalesScreen> {
 
     setState(() {
       if (existingIndex >= 0) {
+        final newQuantity = cartItems[existingIndex].quantity + 1;
+
+        // ✅ Stok kontrolü
+        if (newQuantity > product.stock) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '⚠️ Stok yetersiz! ${product.name} için mevcut stok: ${product.stock}',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+
         cartItems[existingIndex] = cartItems[existingIndex].copyWith(
-          quantity: cartItems[existingIndex].quantity + 1,
+          quantity: newQuantity,
         );
       } else {
+        // ✅ İlk ekleme için de stok kontrolü
+        if (product.stock <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ ${product.name} stokta yok!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
         cartItems.add(SaleItem(
           productId: product.id!,
           productName: product.name,
@@ -584,11 +610,34 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _increaseQuantity(int index) {
-    setState(() {
-      cartItems[index] = cartItems[index].copyWith(
-        quantity: cartItems[index].quantity + 1,
-      );
-    });
+    final cartItem = cartItems[index];
+    final productProvider = context.read<RealtimeProductProvider>();
+    final product = productProvider.products
+        .where((p) => p.id == cartItem.productId)
+        .firstOrNull;
+
+    if (product != null) {
+      final newQuantity = cartItem.quantity + 1;
+
+      // ✅ Stok kontrolü
+      if (newQuantity > product.stock) {
+        // Stok yetersiz uyarısı
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '⚠️ Stok yetersiz! ${product.name} için mevcut stok: ${product.stock}',
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return; // Artırma işlemini iptal et
+      }
+
+      setState(() {
+        cartItems[index] = cartItems[index].copyWith(quantity: newQuantity);
+      });
+    }
   }
 
   void _decreaseQuantity(int index) {
@@ -658,14 +707,14 @@ class _SalesScreenState extends State<SalesScreen> {
       if (product != null) {
         final newStock = product.stock - item.quantity;
 
-        if (newStock <= 0) {
-          // ✅ Stok sıfır veya negatif ise ürünü sil
-          print('🗑️ Stok sıfırlandı, ürün siliniyor: ${product.name}');
-          await productProvider.deleteProduct(product.id.toString());
-        } else {
-          // ✅ Stok pozitif ise güncelle
-          final updatedProduct = product.copyWith(stock: newStock);
-          await productProvider.updateProduct(updatedProduct);
+        // ✅ Stok sıfır olsa bile ürünü silme, sadece 0 yap
+        final finalStock =
+            newStock < 0 ? 0 : newStock; // Negatif olmasını engelle
+        final updatedProduct = product.copyWith(stock: finalStock);
+        await productProvider.updateProduct(updatedProduct);
+
+        if (finalStock == 0) {
+          print('⚠️ ${product.name} ürününün stoku sıfırlandı');
         }
       }
     }

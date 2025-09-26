@@ -247,34 +247,26 @@ class _AddProductWithCameraScreenState
           .toList();
 
       if (existingProducts.isNotEmpty) {
-        // Mevcut ürünü güncelle
-        final existingProduct = existingProducts.first;
-        final updatedProduct = Product(
-          id: existingProduct.id, // Mevcut ID'yi koru
-          name: _nameController.text.trim(),
-          barcode: _barcodeController.text.trim(),
-          salePrice: double.tryParse(_salePriceController.text) ?? 0.0,
-          purchasePrice: _purchasePriceController.text.trim().isEmpty
-              ? null
-              : double.tryParse(_purchasePriceController.text),
-          stock: int.tryParse(_stockController.text) ?? 0,
-          description: null,
-          category: null,
-          minStock: int.tryParse(_minStockController.text) ?? 5,
-          storeId: existingProduct.storeId, // ✅ Mevcut store ID'yi koru
-        );
-
-        await realtimeProductProvider.updateProduct(updatedProduct);
-
+        // ❌ Aynı barkodlu ürün zaten mevcut - HATA VER
         if (mounted) {
-          Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Mevcut ürün başarıyla güncellendi'),
-              backgroundColor: Colors.blue,
+            SnackBar(
+              content: Text(
+                '❌ Bu barkod numarası zaten kullanılıyor!\n'
+                'Barkod: ${_barcodeController.text.trim()}\n'
+                'Mevcut Ürün: ${existingProducts.first.name}',
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'Tamam',
+                textColor: Colors.white,
+                onPressed: () {},
+              ),
             ),
           );
         }
+        return; // İşlemi sonlandır
       } else {
         // Yeni ürün ekle
         // ✅ Fiyat kontrolü

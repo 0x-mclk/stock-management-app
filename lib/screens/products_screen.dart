@@ -551,6 +551,63 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 return;
               }
 
+              // ✅ Barkod çakışması kontrolü
+              final barcodeToCheck = barcodeController.text.trim();
+              final existingProducts = context
+                  .read<RealtimeProductProvider>()
+                  .products
+                  .where((p) => p.barcode == barcodeToCheck)
+                  .toList();
+
+              if (isEditing) {
+                // Güncelleme: Başka üründe aynı barkod var mı kontrol et (kendi hariç)
+                final currentProductId = product.id;
+                final otherProducts = existingProducts
+                    .where((p) => p.id != currentProductId)
+                    .toList();
+
+                if (otherProducts.isNotEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '❌ Bu barkod numarası başka bir ürün tarafından kullanılıyor!\n'
+                        'Barkod: $barcodeToCheck\n'
+                        'Diğer Ürün: ${otherProducts.first.name}',
+                      ),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 4),
+                      action: SnackBarAction(
+                        label: 'Tamam',
+                        textColor: Colors.white,
+                        onPressed: () {},
+                      ),
+                    ),
+                  );
+                  return; // İşlemi sonlandır
+                }
+              } else {
+                // Yeni ürün: Barkod hiç kullanılmamış olmalı
+                if (existingProducts.isNotEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '❌ Bu barkod numarası zaten kullanılıyor!\n'
+                        'Barkod: $barcodeToCheck\n'
+                        'Mevcut Ürün: ${existingProducts.first.name}',
+                      ),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 4),
+                      action: SnackBarAction(
+                        label: 'Tamam',
+                        textColor: Colors.white,
+                        onPressed: () {},
+                      ),
+                    ),
+                  );
+                  return; // İşlemi sonlandır
+                }
+              }
+
               final newProduct = Product(
                 id: product?.id, // Yeni ürün için null olacak
                 name: nameController.text.trim(),

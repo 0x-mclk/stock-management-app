@@ -1541,4 +1541,235 @@ class FirestoreService {
       return [];
     }
   }
+
+  // ==========================================
+  // SUPPLIER OPERATIONS
+  // ==========================================
+
+  /// Add or update supplier with retry mechanism
+  Future<bool> saveSupplier(String storeId, String? supplierId,
+      Map<String, dynamic> supplierData) async {
+    // ✅ StoreId validation
+    if (storeId.isEmpty) {
+      print('❌ SAVESUPPLIER FAILED: StoreId is empty!');
+      return false;
+    }
+
+    // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        supplierData['lastModified'] = FieldValue.serverTimestamp();
+        supplierData['storeId'] = storeId; // ✅ Store ID'yi garantile
+
+        if (supplierId == null) {
+          // 🆕 Add new supplier - Firebase generates ID
+          print('🔄 Attempt $attempt: Adding new supplier to Firebase...');
+          print('🔍 DEBUG: StoreId: $storeId');
+          print('🔍 DEBUG: Supplier data: $supplierData');
+
+          final docRef = await _firestore
+              .collection(_collectionStores)
+              .doc(storeId)
+              .collection('suppliers')
+              .add(supplierData);
+
+          print('✅ New supplier added with Firebase ID: ${docRef.id}');
+          print('🔍 DEBUG: Full path: /stores/$storeId/suppliers/${docRef.id}');
+          return true; // Success - exit retry loop
+        } else {
+          // 🔄 Update existing supplier
+          print('🔄 Attempt $attempt: Updating existing supplier: $supplierId');
+          await _firestore
+              .collection(_collectionStores)
+              .doc(storeId)
+              .collection('suppliers')
+              .doc(supplierId)
+              .update(supplierData);
+
+          print('✅ Supplier updated successfully: $supplierId');
+          return true; // Success - exit retry loop
+        }
+      } catch (e) {
+        print('❌ Firebase saveSupplier error (attempt $attempt): $e');
+
+        if (attempt == 3) {
+          // Son deneme de başarısız
+          print('💀 All retry attempts failed for saveSupplier');
+          return false;
+        }
+
+        // Exponential backoff - wait before retry
+        final waitTime = Duration(milliseconds: 500 * attempt);
+        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
+        await Future.delayed(waitTime);
+      }
+    }
+
+    return false; // This shouldn't be reached
+  }
+
+  /// Delete supplier with retry mechanism
+  Future<bool> deleteSupplier(String storeId, String supplierId) async {
+    // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        print(
+            '🔄 Attempt $attempt: Deleting supplier from Firebase: $supplierId in store: $storeId');
+
+        await _firestore
+            .collection(_collectionStores)
+            .doc(storeId)
+            .collection('suppliers')
+            .doc(supplierId)
+            .delete();
+
+        print('✅ Supplier deleted successfully from Firebase: $supplierId');
+        return true; // Success - exit retry loop
+      } catch (e) {
+        print('❌ Firebase deleteSupplier error (attempt $attempt): $e');
+
+        if (attempt == 3) {
+          // Son deneme de başarısız
+          print('💀 All retry attempts failed for deleteSupplier');
+          return false;
+        }
+
+        // Exponential backoff - wait before retry
+        final waitTime = Duration(milliseconds: 500 * attempt);
+        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
+        await Future.delayed(waitTime);
+      }
+    }
+
+    return false; // This shouldn't be reached
+  }
+
+  /// Get suppliers stream for a store
+  Stream<QuerySnapshot> getSuppliersStream(String storeId) {
+    return _firestore
+        .collection(_collectionStores)
+        .doc(storeId)
+        .collection('suppliers')
+        .where('isActive', isEqualTo: true)
+        .orderBy('name')
+        .snapshots();
+  }
+
+  /// Get specific supplier
+  Future<DocumentSnapshot?> getSupplier(
+      String storeId, String supplierId) async {
+    try {
+      final doc = await _firestore
+          .collection(_collectionStores)
+          .doc(storeId)
+          .collection('suppliers')
+          .doc(supplierId)
+          .get();
+
+      return doc.exists ? doc : null;
+    } catch (e) {
+      print('❌ Firebase getSupplier error: $e');
+      return null;
+    }
+  }
+
+  // ==================== PURCHASE OPERATIONS ====================
+
+  /// Save purchase to supplier subcollection with retry mechanism
+  Future<bool> savePurchase(String storeId, String supplierId,
+      String? purchaseId, Map<String, dynamic> purchaseData) async {
+    if (storeId.isEmpty || supplierId.isEmpty) {
+      print('❌ SAVEPURCHASE FAILED: StoreId or SupplierId is empty!');
+      return false;
+    }
+
+    // 🔄 RETRY MECHANISM - 3 attempts
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        purchaseData['lastModified'] = FieldValue.serverTimestamp();
+        purchaseData['storeId'] = storeId;
+        purchaseData['supplierId'] = supplierId;
+
+        if (purchaseId == null) {
+          // 🆕 Add new purchase
+          print('🔄 Attempt $attempt: Adding new purchase to Firebase...');
+          final docRef = await _firestore
+              .collection(_collectionStores)
+              .doc(storeId)
+              .collection('suppliers')
+              .doc(supplierId)
+              .collection('purchases')
+              .add(purchaseData);
+
+          print('✅ New purchase added with Firebase ID: ${docRef.id}');
+          return true;
+        } else {
+          // 🔄 Update existing purchase
+          print('🔄 Attempt $attempt: Updating existing purchase: $purchaseId');
+          await _firestore
+              .collection(_collectionStores)
+              .doc(storeId)
+              .collection('suppliers')
+              .doc(supplierId)
+              .collection('purchases')
+              .doc(purchaseId)
+              .set(purchaseData, SetOptions(merge: true));
+
+          print('✅ Purchase updated: $purchaseId');
+          return true;
+        }
+      } catch (e) {
+        print('❌ Purchase save attempt $attempt failed: $e');
+        if (attempt == 3) {
+          print('❌ All purchase save attempts failed');
+          return false;
+        }
+        // Wait before retry (exponential backoff)
+        await Future.delayed(Duration(milliseconds: 500 * attempt));
+      }
+    }
+    return false;
+  }
+
+  /// Delete purchase from supplier subcollection
+  Future<bool> deletePurchase(
+      String storeId, String supplierId, String purchaseId) async {
+    try {
+      await _firestore
+          .collection(_collectionStores)
+          .doc(storeId)
+          .collection('suppliers')
+          .doc(supplierId)
+          .collection('purchases')
+          .doc(purchaseId)
+          .delete();
+
+      print('✅ Purchase deleted: $purchaseId');
+      return true;
+    } catch (e) {
+      print('❌ Firebase deletePurchase error: $e');
+      return false;
+    }
+  }
+
+  /// Get purchases stream for a supplier
+  Stream<QuerySnapshot> getPurchasesStream(String storeId, String supplierId) {
+    return _firestore
+        .collection(_collectionStores)
+        .doc(storeId)
+        .collection('suppliers')
+        .doc(supplierId)
+        .collection('purchases')
+        .orderBy('purchaseDate', descending: true)
+        .snapshots();
+  }
+
+  /// Get all purchases for a store (across all suppliers)
+  Stream<QuerySnapshot> getAllPurchasesStream(String storeId) {
+    return _firestore
+        .collectionGroup('purchases')
+        .where('storeId', isEqualTo: storeId)
+        .orderBy('purchaseDate', descending: true)
+        .snapshots();
+  }
 }

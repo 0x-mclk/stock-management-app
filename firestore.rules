@@ -42,6 +42,13 @@ service cloud.firestore {
         (isStoreOwnerSafe(storeId) || isStoreMember(storeId));
     }
     
+    // Suppliers collection - store members can read/write
+    match /stores/{storeId}/suppliers/{supplierId} {
+      // Allow read/write for store owner and members
+      allow read, write: if request.auth != null && 
+        (isStoreOwnerSafe(storeId) || isStoreMember(storeId));
+    }
+    
     // Store members sub-collection - real members system
     match /stores/{storeId}/members/{memberId} {
       // Allow read if user is authenticated and one of:

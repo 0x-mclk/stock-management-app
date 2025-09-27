@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/supplier_provider.dart';
-import '../providers/sales_provider.dart';
+import '../providers/purchase_provider.dart';
+
 import '../models/supplier.dart';
-import '../models/sale.dart';
 import '../utils/currency_formatter.dart';
 import 'supplier_detail_screen.dart';
 
@@ -163,15 +163,10 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   Widget _buildSupplierCard(Supplier supplier) {
     final hasDebt = supplier.debt > 0;
 
-    return Consumer<SalesProvider>(
-      builder: (context, salesProvider, child) {
-        // Bu tedarikçiye ait satışları al ve toplam tutarı hesapla
-        final supplierSales = salesProvider.sales
-            .where((sale) => sale.supplierId == supplier.id)
-            .toList();
-
-        final totalPurchases = supplierSales.fold<double>(
-            0.0, (sum, sale) => sum + sale.totalAmount);
+    return Consumer<SupplierProvider>(
+      builder: (context, supplierProvider, child) {
+        // ✅ Artık Purchase tablosundan gelecek
+        final totalPurchases = supplier.totalPurchases;
 
         return Card(
           margin:
@@ -614,8 +609,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
   }
 
-  void _savePurchase(
-      Supplier supplier, String productName, double amount, DateTime date) {
+  void _savePurchase(Supplier supplier, String productName, double amount,
+      DateTime date) async {
     // Supplier ID kontrolü
     if (supplier.id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -627,29 +622,47 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       return;
     }
 
-    // SaleItem oluştur
-    final saleItem = SaleItem(
-      id: null,
-      productId:
-          'supplier_product_${DateTime.now().millisecondsSinceEpoch}', // Geçici product ID
-      productName: productName,
-      quantity: 1,
-      unitPrice: amount,
-    );
+    try {
+      // ✅ YENİ YÖNTEM: Purchase Provider kullan (Sale değil!)
+      final purchaseProvider = context.read<PurchaseProvider>();
+      final storeId = supplier.storeId; // Supplier'ın kendi store ID'si
 
-    // Sale objesi oluştur
-    final sale = Sale(
-      id: null,
-      supplierId: supplier.id,
-      totalAmount: amount,
-      paymentMethod: PaymentMethod.cash, // Varsayılan ödeme yöntemi
-      items: [saleItem],
-      createdAt: date,
-      storeId: '', // ✅ Provider otomatik atayacak
-    );
+      if (storeId.isEmpty) {
+        throw Exception('Store ID bulunamadı');
+      }
+
+      final purchaseId = await purchaseProvider.createPurchase(
+        supplierId: supplier.id!,
+        storeId: storeId,
+        productName: productName,
+        amount: amount,
+        purchaseDate: date,
+        paymentMethod: 'cash',
+        notes: 'Tedarikçi alımı',
+      );
+
+      if (purchaseId != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Alım kaydedildi: ${amount.toStringAsFixed(2)} TL'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception('Alım kaydedilemedi');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Hata: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      print('❌ Error saving purchase: $e');
+    }
 
     // SalesProvider'a ekle
-    context.read<SalesProvider>().addSale(sale);
+    // ✅ Purchase kaydedildi, Sale sistemine dokunmadık
 
     // Başarı mesajı göster
     ScaffoldMessenger.of(context).showSnackBar(

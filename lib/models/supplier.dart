@@ -48,6 +48,28 @@ class Supplier {
     };
   }
 
+  // Firebase için ayrı toMap metodu - camelCase field adları ile
+  Map<String, dynamic> toFirebaseMap() {
+    return {
+      'id': id,
+      'storeId': storeId, // camelCase
+      'store_id': storeId, // backward compatibility
+      'name': name,
+      'phone': phone,
+      'email': email,
+      'address': address,
+      'notes': notes,
+      'debt': debt,
+      'total_purchases': totalPurchases, // underscore versiyonu
+      'monthly_purchases': monthlyPurchases, // underscore versiyonu
+      'yearly_purchases': yearlyPurchases, // underscore versiyonu
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+      'lastModified': updatedAt.toIso8601String(), // Firebase için
+      'isActive': true, // Firebase query için
+    };
+  }
+
   factory Supplier.fromMap(Map<String, dynamic> map) {
     return Supplier(
       id: map['id']?.toString(),
@@ -64,6 +86,7 @@ class Supplier {
       createdAt: DateTime.parse(map['created_at']),
       updatedAt: DateTime.parse(map['updated_at']),
     );
+    // Note: isActive sadece Firebase'de filtering için kullanılıyor
   }
 
   Supplier copyWith({

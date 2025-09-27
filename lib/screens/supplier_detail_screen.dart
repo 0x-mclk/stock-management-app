@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/supplier_provider.dart';
-import '../providers/sales_provider.dart';
+import '../providers/purchase_provider.dart';
 import '../models/supplier.dart';
-import '../models/sale.dart';
+import '../models/purchase.dart';
 import '../utils/currency_formatter.dart';
 
 class SupplierDetailScreen extends StatefulWidget {
@@ -42,6 +42,15 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
       vsync: this,
       initialIndex: widget.initialTabIndex,
     ); // 4'ten 5'e çıkarıldı
+
+    // ✅ Purchase provider'ı başlat
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.supplier.id != null) {
+        context
+            .read<PurchaseProvider>()
+            .loadPurchasesBySupplier(widget.supplier.id!);
+      }
+    });
   }
 
   @override
@@ -227,11 +236,14 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   }
 
   Widget _buildPurchaseHistory() {
-    return Consumer<SalesProvider>(
-      builder: (context, salesProvider, child) {
-        // Her tedarikçi için kendi gerçek alışveriş geçmişini al
-        final purchases = _getSupplierPurchases(salesProvider.sales);
-        final filteredPurchases = _getFilteredPurchases(purchases);
+    return Consumer<PurchaseProvider>(
+      builder: (context, purchaseProvider, child) {
+        // ✅ YENİ: PurchaseProvider'dan gerçek purchases'ları al
+        final allPurchases = purchaseProvider.purchases;
+        final supplierPurchases = allPurchases
+            .where((p) => p.supplierId == widget.supplier.id)
+            .toList();
+        final filteredPurchases = supplierPurchases; // Şimdilik filtresiz
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -257,7 +269,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
                     child: _buildSummaryCard(
                       'Toplam Tutar',
                       _formatCurrency(filteredPurchases.fold<double>(
-                          0, (sum, p) => sum + p.finalAmount)),
+                          0, (sum, p) => sum + p.amount)),
                       Icons.monetization_on,
                       Colors.green,
                     ),
@@ -292,7 +304,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
                   itemCount: filteredPurchases.length,
                   itemBuilder: (context, index) {
                     final purchase = filteredPurchases[index];
-                    return _buildPurchaseCard(purchase);
+                    return _buildPurchaseCardNew(purchase);
                   },
                 ),
             ],
@@ -303,10 +315,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   }
 
   Widget _buildMonthlyAnalysis() {
-    return Consumer<SalesProvider>(
-      builder: (context, salesProvider, child) {
+    return Consumer<PurchaseProvider>(
+      builder: (context, purchaseProvider, child) {
         // Her tedarikçi için kendi gerçek verilerini al
-        final purchases = _getSupplierPurchases(salesProvider.sales);
+        final purchases = _getSupplierPurchases(purchaseProvider.purchases);
         final monthlyData = _getFilteredMonthlyData(purchases);
 
         return SingleChildScrollView(
@@ -373,10 +385,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   }
 
   Widget _buildYearlyAnalysis() {
-    return Consumer<SalesProvider>(
-      builder: (context, salesProvider, child) {
+    return Consumer<PurchaseProvider>(
+      builder: (context, purchaseProvider, child) {
         // Her tedarikçi için kendi gerçek verilerini al
-        final purchases = _getSupplierPurchases(salesProvider.sales);
+        final purchases = _getSupplierPurchases(purchaseProvider.purchases);
         final yearlyData = _getYearlyData(purchases);
 
         return SingleChildScrollView(
@@ -597,46 +609,38 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
     );
   }
 
-  Widget _buildPurchaseCard(Sale purchase) {
-    // İlk ürünün adını al (eğer varsa)
-    String productName = purchase.items.isNotEmpty
-        ? purchase.items.first.productName
-        : 'Ürün bilgisi yok';
-
+  Widget _buildPurchaseCardNew(dynamic purchase) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         title: Text(
-          productName,
+          purchase.productName ?? 'Ürün bilgisi yok',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Tarih: ${_formatDate(purchase.createdAt)}'),
+            Text('Tarih: ${_formatDate(purchase.purchaseDate)}'),
+            if (purchase.notes != null && purchase.notes!.isNotEmpty)
+              Text('Not: ${purchase.notes}'),
           ],
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              CurrencyFormatter.formatWithSymbol(purchase.finalAmount),
+              CurrencyFormatter.formatWithSymbol(purchase.amount),
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
             ),
-            const SizedBox(width: 8),
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 20),
               onSelected: (value) {
-                switch (value) {
-                  case 'edit':
-                    _showEditPurchaseDialog(purchase);
-                    break;
-                  case 'delete':
-                    _confirmDeletePurchase(purchase);
-                    break;
+                if (value == 'edit') {
+                  _showEditPurchaseDialog(purchase);
+                } else if (value == 'delete') {
+                  _confirmDeletePurchase(purchase);
                 }
               },
               itemBuilder: (context) => [
@@ -664,7 +668,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
             ),
           ],
         ),
-        onTap: () => _showPurchaseDetails(purchase),
+        onTap: () {
+          _showPurchaseDetails(purchase);
+        },
       ),
     );
   }
@@ -751,44 +757,37 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   }
 
   // Helper methods
-  List<Sale> _getSupplierPurchases(List<Sale> allSales) {
+  List<dynamic> _getSupplierPurchases(List<dynamic> allPurchases) {
     // Sadece gerçek alışverişleri göster
-    if (allSales.isEmpty) return [];
+    if (allPurchases.isEmpty) return [];
     final supplierId = widget.supplier.id;
     // Sadece bu tedarikçiye ait alışverişleri filtrele
-    final supplierPurchases =
-        allSales.where((sale) => sale.supplierId == supplierId).toList();
+    final supplierPurchases = allPurchases
+        .where((purchase) => purchase.supplierId == supplierId)
+        .toList();
     // Tarihe göre sırala (en yeni en üstte)
-    supplierPurchases.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    supplierPurchases.sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate));
     return supplierPurchases;
   }
 
-  List<Sale> _getFilteredPurchases(List<Sale> purchases) {
-    return purchases.where((purchase) {
-      return purchase.createdAt
-              .isAfter(_startDate.subtract(const Duration(days: 1))) &&
-          purchase.createdAt.isBefore(_endDate.add(const Duration(days: 1)));
-    }).toList();
-  }
-
-  List<Map<String, dynamic>> _getFilteredMonthlyData(List<Sale> purchases) {
+  List<Map<String, dynamic>> _getFilteredMonthlyData(List<dynamic> purchases) {
     final monthlyMap = <String, Map<String, dynamic>>{};
 
     for (final purchase in purchases) {
       final monthKey =
-          '${purchase.createdAt.year}-${purchase.createdAt.month.toString().padLeft(2, '0')}';
-      final monthName =
-          _getMonthName(purchase.createdAt.month, purchase.createdAt.year);
+          '${purchase.purchaseDate.year}-${purchase.purchaseDate.month.toString().padLeft(2, '0')}';
+      final monthName = _getMonthName(
+          purchase.purchaseDate.month, purchase.purchaseDate.year);
 
       if (monthlyMap.containsKey(monthKey)) {
-        monthlyMap[monthKey]!['total'] += purchase.finalAmount;
+        monthlyMap[monthKey]!['total'] += purchase.amount;
         monthlyMap[monthKey]!['count']++;
       } else {
         monthlyMap[monthKey] = {
           'month': monthName,
-          'monthNumber': purchase.createdAt.month,
-          'year': purchase.createdAt.year,
-          'total': purchase.finalAmount,
+          'monthNumber': purchase.purchaseDate.month,
+          'year': purchase.purchaseDate.year,
+          'total': purchase.amount,
           'count': 1,
         };
       }
@@ -802,19 +801,19 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
       });
   }
 
-  List<Map<String, dynamic>> _getYearlyData(List<Sale> purchases) {
+  List<Map<String, dynamic>> _getYearlyData(List<dynamic> purchases) {
     final yearlyMap = <int, Map<String, dynamic>>{};
 
     for (final purchase in purchases) {
-      final year = purchase.createdAt.year;
+      final year = purchase.purchaseDate.year;
 
       if (yearlyMap.containsKey(year)) {
-        yearlyMap[year]!['total'] += purchase.finalAmount;
+        yearlyMap[year]!['total'] += purchase.amount;
         yearlyMap[year]!['count']++;
       } else {
         yearlyMap[year] = {
           'year': year,
-          'total': purchase.finalAmount,
+          'total': purchase.amount,
           'count': 1,
         };
       }
@@ -1283,11 +1282,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
     _showAddPurchaseDialog();
   }
 
-  void _showPurchaseDetails(Sale purchase) {
-    // İlk ürünün adını al (eğer varsa)
-    String productName = purchase.items.isNotEmpty
-        ? purchase.items.first.productName
-        : 'Ürün bilgisi yok';
+  void _showPurchaseDetails(dynamic purchase) {
+    String productName = purchase.productName ?? 'Ürün bilgisi yok';
 
     showDialog(
       context: context,
@@ -1303,26 +1299,29 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Tarih: ${_formatDate(purchase.createdAt)}',
+                'Tarih: ${_formatDate(purchase.purchaseDate)}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               Text(
-                'Toplam Tutar: ${CurrencyFormatter.formatWithSymbol(purchase.finalAmount)}',
+                'Toplam Tutar: ${CurrencyFormatter.formatWithSymbol(purchase.amount)}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 16),
-              const Text('Ürünler:',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              ...purchase.items.map((item) => Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '• ${item.productName} (${item.quantity} adet)',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  )),
+              if (purchase.notes != null && purchase.notes!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Not: ${purchase.notes}',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                'Ödeme: ${purchase.paymentMethod ?? 'Belirtilmemiş'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),
@@ -1482,28 +1481,42 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
     );
   }
 
-  void _savePurchase(String productName, double amount, DateTime purchaseDate) {
-    // Yeni Sale oluşturuluyor
-    final newSale = Sale(
-      supplierId: widget.supplier.id,
-      totalAmount: amount,
-      paymentMethod: PaymentMethod.cash,
-      items: [
-        SaleItem(
-          productId: '',
-          productName: productName,
-          quantity: 1,
-          unitPrice: amount,
-        ),
-      ],
-      createdAt: purchaseDate,
-      storeId: '', // ✅ Provider otomatik atayacak
-    );
-    // Satışı ekle (SalesProvider üzerinden eklenmeli)
-    context.read<SalesProvider>().addSale(newSale);
+  void _savePurchase(
+      String productName, double amount, DateTime purchaseDate) async {
+    try {
+      // ✅ YENİ YÖNTEM: Purchase Provider kullan (Sale değil!)
+      final purchaseProvider = context.read<PurchaseProvider>();
+      final storeId = widget.supplier.storeId;
 
-    // Tedarikçi provider'ına toplam alışverişi güncelle
-    context.read<SupplierProvider>().addPurchase(widget.supplier.id!, amount);
+      if (storeId.isEmpty) {
+        throw Exception('Store ID bulunamadı');
+      }
+
+      final purchaseId = await purchaseProvider.createPurchase(
+        supplierId: widget.supplier.id!,
+        storeId: storeId,
+        productName: productName,
+        amount: amount,
+        purchaseDate: purchaseDate,
+        paymentMethod: 'cash',
+        notes: 'Tedarikçi alımı',
+      );
+
+      if (purchaseId == null) {
+        throw Exception('Purchase kaydedilemedi');
+      }
+
+      print('✅ Purchase created successfully: $purchaseId');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Hata: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      print('❌ Error saving purchase: $e');
+      return;
+    }
 
     // Başarı mesajı
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1519,14 +1532,14 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   }
 
   // Alışveriş düzenleme dialog'u
-  void _showEditPurchaseDialog(Sale purchase) {
+  void _showEditPurchaseDialog(dynamic purchase) {
     final productNameController = TextEditingController(
-      text: purchase.items.isNotEmpty ? purchase.items.first.productName : '',
+      text: purchase.productName ?? '',
     );
     final amountController = TextEditingController(
-      text: purchase.finalAmount.toString(),
+      text: purchase.amount.toString(),
     );
-    DateTime selectedDate = purchase.createdAt;
+    DateTime selectedDate = purchase.purchaseDate;
 
     showDialog(
       context: context,
@@ -1657,10 +1670,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   }
 
   // Alışveriş silme onay dialog'u
-  void _confirmDeletePurchase(Sale purchase) {
-    final productName = purchase.items.isNotEmpty
-        ? purchase.items.first.productName
-        : 'Ürün bilgisi yok';
+  void _confirmDeletePurchase(dynamic purchase) {
+    final productName = purchase.productName ?? 'Ürün bilgisi yok';
 
     showDialog(
       context: context,
@@ -1686,9 +1697,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
                     'Ürün: $productName',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  Text('Tarih: ${_formatDate(purchase.createdAt)}'),
+                  Text('Tarih: ${_formatDate(purchase.purchaseDate)}'),
                   Text(
-                    'Tutar: ${CurrencyFormatter.formatWithSymbol(purchase.finalAmount)}',
+                    'Tutar: ${CurrencyFormatter.formatWithSymbol(purchase.amount)}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.red,
@@ -1730,111 +1741,106 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   }
 
   // Alışveriş güncelleme
-  void _updatePurchase(
-      Sale purchase, String productName, double amount, DateTime purchaseDate) {
-    // Eski tutarı tedarikçi borcundan çıkar
-    context
-        .read<SupplierProvider>()
-        .addPurchase(widget.supplier.id!, -purchase.finalAmount);
+  void _updatePurchase(dynamic purchase, String productName, double amount,
+      DateTime purchaseDate) async {
+    try {
+      final purchaseProvider = context.read<PurchaseProvider>();
 
-    // Yeni Sale oluştur
-    final updatedSale = Sale(
-      id: purchase.id,
-      supplierId: widget.supplier.id,
-      totalAmount: amount,
-      paymentMethod: purchase.paymentMethod,
-      items: [
-        SaleItem(
-          productId: '',
-          productName: productName,
-          quantity: 1,
-          unitPrice: amount,
+      // Yeni Purchase objesi oluştur
+      final updatedPurchase = Purchase(
+        id: purchase.id,
+        supplierId: widget.supplier.id!,
+        storeId: purchase.storeId,
+        productName: productName,
+        amount: amount,
+        paymentMethod: purchase.paymentMethod ?? 'cash',
+        notes: purchase.notes ?? '',
+        purchaseDate: purchaseDate,
+        createdAt: purchase.createdAt,
+        updatedAt: DateTime.now(),
+      );
+
+      // Purchase'ı güncelle
+      final success = await purchaseProvider.updatePurchase(updatedPurchase);
+
+      if (success) {
+        // Başarı mesajı
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$productName alışverişi güncellendi'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
+        // Sayfayı yenile
+        setState(() {});
+      } else {
+        throw Exception('Purchase güncellenemedi');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Hata: $e'),
+          backgroundColor: Colors.red,
         ),
-      ],
-      createdAt: purchaseDate,
-      storeId: purchase.storeId, // ✅ Mevcut store ID'yi koru
-    );
-
-    // Satışı güncelle
-    context.read<SalesProvider>().updateSale(updatedSale);
-
-    // Yeni tutarı tedarikçi borcuna ekle
-    context.read<SupplierProvider>().addPurchase(widget.supplier.id!, amount);
-
-    // Başarı mesajı
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$productName alışverişi güncellendi'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-
-    // Sayfayı yenile
-    setState(() {});
+      );
+    }
   }
 
   // Alışveriş silme
-  void _deletePurchase(Sale purchase) {
-    final productName = purchase.items.isNotEmpty
-        ? purchase.items.first.productName
-        : 'Ürün bilgisi yok';
+  void _deletePurchase(dynamic purchase) async {
+    final productName = purchase.productName ?? 'Ürün bilgisi yok';
 
-    // Tutarı tedarikçi borcundan çıkar
-    context
-        .read<SupplierProvider>()
-        .addPurchase(widget.supplier.id!, -purchase.finalAmount);
+    try {
+      final purchaseProvider = context.read<PurchaseProvider>();
 
-    // Satışı sil
-    context.read<SalesProvider>().deleteSale(purchase.id!);
+      // Purchase'ı sil
+      final success = await purchaseProvider.deletePurchase(
+        purchase.id,
+        widget.supplier.id!,
+      );
 
-    // Başarı mesajı
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$productName alışverişi silindi'),
-        duration: const Duration(seconds: 2),
-        backgroundColor: Colors.red,
-      ),
-    );
+      if (success) {
+        // Başarı mesajı
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$productName alışverişi silindi'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
+
+        // Sayfayı yenile
+        setState(() {});
+      } else {
+        throw Exception('Purchase silinemedi');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Hata: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
 
     // Sayfayı yenile
     setState(() {});
   }
 
-  // Mali durum bölümü - Sadeleştirilmiş düz yazı görünümü
+  // Mali durum bölümü - ✅ YENİ: SupplierProvider kullan
   Widget _buildFinancialStatusSection() {
-    return Consumer<SalesProvider>(
-      builder: (context, salesProvider, child) {
-        // Güncel tedarikçi bilgilerini SupplierProvider'dan al
-        final supplierProvider = context.watch<SupplierProvider>();
+    return Consumer<SupplierProvider>(
+      builder: (context, supplierProvider, child) {
+        // ✅ Güncel tedarikçi bilgilerini Firebase'dan al
         final currentSupplier = supplierProvider.suppliers.firstWhere(
             (s) => s.id == widget.supplier.id,
             orElse: () => widget.supplier);
 
-        // Bu tedarikçiye ait satışları al
-        final supplierSales = salesProvider.sales
-            .where((sale) => sale.supplierId == widget.supplier.id)
-            .toList();
-
-        // Toplam alışveriş tutarını hesapla
-        final totalPurchases = supplierSales.fold<double>(
-            0.0, (sum, sale) => sum + sale.totalAmount);
-
-        // Bu ay alışverişlerini hesapla
-        final now = DateTime.now();
-        final thisMonthSales = supplierSales
-            .where((sale) =>
-                sale.createdAt.year == now.year &&
-                sale.createdAt.month == now.month)
-            .toList();
-        final monthlyPurchases = thisMonthSales.fold<double>(
-            0.0, (sum, sale) => sum + sale.totalAmount);
-
-        // Bu yıl alışverişlerini hesapla
-        final thisYearSales = supplierSales
-            .where((sale) => sale.createdAt.year == now.year)
-            .toList();
-        final yearlyPurchases = thisYearSales.fold<double>(
-            0.0, (sum, sale) => sum + sale.totalAmount);
+        // ✅ YENİ: Supplier model'den direkt values al
+        final totalPurchases = currentSupplier.totalPurchases;
+        final monthlyPurchases = currentSupplier.monthlyPurchases;
+        final yearlyPurchases = currentSupplier.yearlyPurchases;
 
         return Card(
           child: Padding(

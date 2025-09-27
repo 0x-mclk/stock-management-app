@@ -77,6 +77,14 @@
         { "fieldPath": "isActive", "mode": "ASCENDING" },
         { "fieldPath": "createdAt", "mode": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "suppliers",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "isActive", "mode": "ASCENDING" },
+        { "fieldPath": "name", "mode": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

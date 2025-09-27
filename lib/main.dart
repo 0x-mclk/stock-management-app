@@ -11,6 +11,7 @@ import 'providers/app_provider.dart';
 import 'providers/realtime_product_provider.dart';
 import 'providers/sales_provider.dart';
 import 'providers/supplier_provider.dart';
+import 'providers/purchase_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
@@ -87,6 +88,7 @@ class StockManagementApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => RealtimeProductProvider()),
         ChangeNotifierProvider(create: (_) => SalesProvider()),
         ChangeNotifierProvider(create: (_) => SupplierProvider()),
+        ChangeNotifierProvider(create: (_) => PurchaseProvider()),
         ChangeNotifierProvider(create: (_) => ConnectivityService()),
         ChangeNotifierProvider(
             create: (_) =>

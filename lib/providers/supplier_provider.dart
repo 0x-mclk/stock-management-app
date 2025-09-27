@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart'; // ✅ UUID generation için
 import '../models/supplier.dart';
 import '../services/data_service.dart';
 import '../services/store_selection_service.dart';
@@ -218,7 +219,12 @@ class SupplierProvider extends ChangeNotifier {
       double previousDebt,
       double newDebt) async {
     try {
+      // ✅ Firebase uyumlu STRING ID generate et
+      final uuid = Uuid();
+      final paymentId = uuid.v4();
+
       final paymentData = {
+        'id': paymentId, // ✅ STRING ID eklendi
         'supplier_id': supplierId,
         'type': type,
         'amount': amount,
@@ -229,6 +235,7 @@ class SupplierProvider extends ChangeNotifier {
       };
 
       await _dataService.insert('payment_history', paymentData);
+      print('✅ Payment history saved with STRING ID: $paymentId');
     } catch (e) {
       // // Debug print removed // Removed for production
     }

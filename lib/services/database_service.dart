@@ -26,7 +26,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 10, // ✅ Firebase uyumlu ID formatı için versiyon artırıldı
+      version: 11, // ✅ STRING ID formatı için versiyon artırıldı
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -82,10 +82,10 @@ class DatabaseService {
       )
     ''');
 
-    // Suppliers table
+    // Suppliers table - Firebase uyumlu ID formatı
     await db.execute('''
       CREATE TABLE suppliers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         phone TEXT,
         email TEXT,
@@ -101,10 +101,10 @@ class DatabaseService {
       )
     ''');
 
-    // Payment history table
+    // Payment history table - Firebase uyumlu ID formatı
     await db.execute('''
       CREATE TABLE payment_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
         supplier_id TEXT NOT NULL,
         type TEXT NOT NULL,
         amount REAL NOT NULL,
@@ -116,10 +116,10 @@ class DatabaseService {
       )
     ''');
 
-    // Transaction history table
+    // Transaction history table - Firebase uyumlu ID formatı
     await db.execute('''
       CREATE TABLE transaction_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY,
         supplier_id TEXT NOT NULL,
         type TEXT NOT NULL,
         amount REAL NOT NULL,
@@ -146,10 +146,10 @@ class DatabaseService {
       await db.execute('ALTER TABLE sales ADD COLUMN supplier_id TEXT');
     }
     if (oldVersion < 3) {
-      // Add payment history table
+      // Add payment history table - Firebase uyumlu ID formatı
       await db.execute('''
         CREATE TABLE payment_history (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          id TEXT PRIMARY KEY,
           supplier_id TEXT NOT NULL,
           type TEXT NOT NULL,
           amount REAL NOT NULL,
@@ -160,10 +160,10 @@ class DatabaseService {
       ''');
     }
     if (oldVersion < 4) {
-      // Add transaction history table
+      // Add transaction history table - Firebase uyumlu ID formatı
       await db.execute('''
         CREATE TABLE transaction_history (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          id TEXT PRIMARY KEY,
           supplier_id TEXT NOT NULL,
           type TEXT NOT NULL,
           amount REAL NOT NULL,
@@ -242,6 +242,68 @@ class DatabaseService {
       await db.delete('products');
 
       print('🔄 SQLite tabloları Firebase uyumlu ID formatına geçirildi');
+    }
+    if (oldVersion < 11) {
+      // ✅ Complete migration to STRING ID format for all tables
+      print('🔄 Migrating to STRING ID format for all tables...');
+
+      // Drop and recreate tables to ensure proper STRING ID format
+      await db.execute('DROP TABLE IF EXISTS suppliers');
+      await db.execute('DROP TABLE IF EXISTS payment_history');
+      await db.execute('DROP TABLE IF EXISTS transaction_history');
+
+      // Recreate with STRING IDs
+      await db.execute('''
+        CREATE TABLE suppliers (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          phone TEXT,
+          email TEXT,
+          address TEXT,
+          debt REAL DEFAULT 0,
+          total_purchases REAL DEFAULT 0,
+          monthly_purchases REAL DEFAULT 0,
+          yearly_purchases REAL DEFAULT 0,
+          notes TEXT,
+          store_id TEXT NOT NULL DEFAULT "default_store",
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE payment_history (
+          id TEXT PRIMARY KEY,
+          supplier_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          amount REAL NOT NULL,
+          description TEXT,
+          previous_debt REAL NOT NULL DEFAULT 0,
+          new_debt REAL NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE transaction_history (
+          id TEXT PRIMARY KEY,
+          supplier_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          amount REAL NOT NULL,
+          description TEXT,
+          previous_debt REAL NOT NULL,
+          new_debt REAL NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
+        )
+      ''');
+
+      // Recreate indexes
+      await db.execute(
+          'CREATE INDEX idx_suppliers_store_id ON suppliers(store_id)');
+
+      print('✅ All tables successfully migrated to STRING ID format');
     }
   }
 

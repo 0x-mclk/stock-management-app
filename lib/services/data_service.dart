@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart'; // ✅ UUID generation için
 import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/supplier.dart';
@@ -51,14 +52,17 @@ class DataService {
           '💾 SAVE PRODUCT - ID: ${product.id}, Name: ${product.name}, StoreID: ${product.storeId}');
 
       if (product.id == null) {
-        // New product - insert with barcode conflict handling
-        final productMap = product.toMap();
-        productMap.remove('id'); // Remove ID for auto-generation
-        print('➕ INSERTING new product: ${product.name}');
+        // ✅ Firebase uyumlu STRING ID generate et
+        final uuid = Uuid();
+        final newId = uuid.v4();
+
+        final productWithId = product.copyWith(id: newId);
+        final productMap = productWithId.toMap();
+        print('➕ INSERTING new product with STRING ID: $newId');
 
         try {
-          final newId = await _databaseService.insert('products', productMap);
-          print('✅ NEW PRODUCT inserted with ID: $newId');
+          await _databaseService.insert('products', productMap);
+          print('✅ NEW PRODUCT inserted with STRING ID: $newId');
         } catch (e) {
           if (e
               .toString()
@@ -234,23 +238,24 @@ class DataService {
         final itemsToSave = List<SaleItem>.from(sale.items);
         // // Debug print removed // Removed for production
 
-        // Insert new sale
-        final saleMap = sale.toMap();
-        // // Debug print removed // Removed for production
+        // ✅ Firebase uyumlu STRING ID generate et
+        final uuid = Uuid();
+        final newSaleId = uuid.v4();
 
-        saleMap.remove('id'); // Yeni satışlarda ID çıkarılır
-        final saleId = await _databaseService.insert('sales', saleMap);
+        final saleWithId = sale.copyWith(id: newSaleId);
+        final saleMap = saleWithId.toMap();
 
-        // // Debug print removed // Removed for production
-        // // Debug print removed // Removed for production
+        await _databaseService.insert('sales', saleMap);
+        print('✅ NEW SALE inserted with STRING ID: $newSaleId');
 
-        // Insert sale items
+        // Insert sale items with STRING IDs
         for (final item in itemsToSave) {
-          final itemMap = item.toMap();
-          itemMap['sale_id'] = saleId.toString();
-          itemMap.remove('id'); // SaleItem ID'si de çıkarılır
+          final itemId = uuid.v4();
+          final itemWithId = item.copyWith(id: itemId);
+          final itemMap = itemWithId.toMap();
+          itemMap['sale_id'] = newSaleId;
           await _databaseService.insert('sale_items', itemMap);
-          // Debug print removed
+          print('✅ Sale item inserted with STRING ID: $itemId');
         }
 
         // // Debug print removed // Removed for production
@@ -364,9 +369,15 @@ class DataService {
   Future<void> saveSupplier(Supplier supplier) async {
     try {
       if (supplier.id?.isEmpty ?? true) {
-        final supplierMap = supplier.toMap();
-        supplierMap.remove('id'); // Yeni tedarikçilerde ID çıkarılır
+        // ✅ Firebase uyumlu STRING ID generate et
+        final uuid = Uuid();
+        final newId = uuid.v4();
+
+        final supplierWithId = supplier.copyWith(id: newId);
+        final supplierMap = supplierWithId.toMap();
         await _databaseService.insert('suppliers', supplierMap);
+
+        print('✅ New supplier saved with STRING ID: $newId');
       } else {
         await _databaseService.update(
           'suppliers',
@@ -374,9 +385,10 @@ class DataService {
           where: 'id = ?',
           whereArgs: [supplier.id],
         );
+        print('✅ Supplier updated with ID: ${supplier.id}');
       }
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ Supplier save error: $e');
       rethrow;
     }
   }

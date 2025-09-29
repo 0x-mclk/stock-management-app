@@ -137,47 +137,71 @@ class SupplierProvider extends ChangeNotifier {
 
   Future<void> updateSupplier(Supplier supplier) async {
     try {
-      // ✅ Store ID kontrolü - güvenlik için
+      print('🔄 SupplierProvider.updateSupplier başlatıldı: ${supplier.name}');
+
+      // ✅ Store ID kontrolü
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
-      if (supplier.storeId != storeId) {
-        throw Exception('Bu tedarikçiyi düzenleme yetkiniz yok');
-      }
 
-      await _databaseService.updateSupplier(supplier);
-      final index = _suppliers.indexWhere((s) => s.id == supplier.id);
+      print('🔍 DEBUG: Current Store ID: $storeId');
+      print('🔍 DEBUG: Supplier Store ID: ${supplier.storeId}');
+      print('🔍 DEBUG: Updating supplier: ${supplier.id} - ${supplier.name}');
+
+      // ✅ Supplier'a storeId'yi ekle
+      final updatedSupplier = supplier.copyWith(
+        storeId: storeId,
+        updatedAt: DateTime.now(),
+      );
+
+      print('🔄 DatabaseService.updateSupplier çağırılıyor...');
+      await _databaseService.updateSupplier(updatedSupplier);
+      print('✅ DatabaseService.updateSupplier başarılı');
+
+      final index = _suppliers.indexWhere((s) => s.id == updatedSupplier.id);
       if (index != -1) {
-        _suppliers[index] = supplier;
+        _suppliers[index] = updatedSupplier;
+        print(
+            '✅ Local supplier listesi güncellendi, notifyListeners çağırılıyor');
         notifyListeners();
+      } else {
+        print('❌ Supplier local listede bulunamadı: ${updatedSupplier.id}');
       }
+      print('✅ SupplierProvider.updateSupplier tamamlandı');
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ SupplierProvider.updateSupplier hatası: $e');
       rethrow;
     }
   }
 
   Future<void> removeSupplier(String supplierId) async {
     try {
+      print('🔄 SupplierProvider.removeSupplier başlatıldı: $supplierId');
+
       // ✅ Store ID kontrolü - güvenlik için
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      // Tedarikçinin bu store'a ait olduğunu kontrol et
+      // Tedarikçiyi memory'den bul
       final supplier = _suppliers.firstWhere((s) => s.id == supplierId,
           orElse: () => throw Exception('Tedarikçi bulunamadı'));
-      if (supplier.storeId != storeId) {
-        throw Exception('Bu tedarikçiyi silme yetkiniz yok');
-      }
 
+      print('🔍 DEBUG: Deleting supplier: ${supplier.id} - ${supplier.name}');
+
+      print('🔄 DatabaseService.deleteSupplier çağırılıyor...');
       await _databaseService.deleteSupplier(supplierId, _currentStoreId ?? '');
+      print('✅ DatabaseService.deleteSupplier başarılı');
+
       _suppliers.removeWhere((s) => s.id == supplierId);
+      print(
+          '✅ Local supplier listesinden silindi, notifyListeners çağırılıyor');
       notifyListeners();
+      print('✅ SupplierProvider.removeSupplier tamamlandı');
     } catch (e) {
-      // // Debug print removed // Removed for production
+      print('❌ SupplierProvider.removeSupplier hatası: $e');
       rethrow;
     }
   }

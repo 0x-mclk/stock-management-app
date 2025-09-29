@@ -689,16 +689,25 @@ class DatabaseService {
       firebaseData['isActive'] = true; // Firebase query için
 
       // For new suppliers, pass null supplierId to trigger Firebase document creation
-      final success = await FirestoreService.instance.saveSupplier(
+      final firebaseDocId = await FirestoreService.instance.saveSupplier(
         storeId,
         isNewSupplier ? null : supplierId,
         firebaseData,
       );
 
-      if (success) {
-        print('✅ Supplier synced to Firebase: $supplierId');
+      if (firebaseDocId != null) {
+        print(
+            '✅ Supplier synced to Firebase: $supplierId -> Firebase ID: $firebaseDocId');
+
+        // If this was a new supplier and we got a different Firebase ID, update SQLite
+        if (isNewSupplier && firebaseDocId != supplierId) {
+          print(
+              '🔄 Updating SQLite with Firebase ID: $supplierId -> $firebaseDocId');
+          await _updateSupplierIdInSQLite(supplierId, firebaseDocId);
+        }
+
         // Clear pending sync flag
-        await _clearSupplierPendingSync(supplierId);
+        await _clearSupplierPendingSync(firebaseDocId);
       } else {
         print(
             '⚠️ Failed to sync supplier to Firebase: $supplierId - will retry later');
@@ -1290,6 +1299,56 @@ class DatabaseService {
       }
     } catch (e) {
       print('❌ Error retrying pending supplier syncs: $e');
+    }
+  }
+
+  /// Update supplier ID in SQLite when Firebase assigns a different ID
+  Future<void> _updateSupplierIdInSQLite(String oldId, String newId) async {
+    final db = await database;
+
+    try {
+      // Get the supplier data first
+      final suppliers = await db.query(
+        'suppliers',
+        where: 'id = ?',
+        whereArgs: [oldId],
+      );
+
+      if (suppliers.isNotEmpty) {
+        final supplierData = Map<String, dynamic>.from(suppliers.first);
+        supplierData['id'] = newId; // Update with Firebase ID
+        supplierData['updated_at'] = DateTime.now().toIso8601String();
+
+        // Insert with new ID
+        await db.insert('suppliers', supplierData,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+
+        // Delete old record
+        await db.delete(
+          'suppliers',
+          where: 'id = ?',
+          whereArgs: [oldId],
+        );
+
+        // Update related records (payment_history, purchases, etc.)
+        await db.update(
+          'payment_history',
+          {'supplier_id': newId},
+          where: 'supplier_id = ?',
+          whereArgs: [oldId],
+        );
+
+        await db.update(
+          'purchases',
+          {'supplier_id': newId},
+          where: 'supplier_id = ?',
+          whereArgs: [oldId],
+        );
+
+        print('✅ Supplier ID updated in SQLite: $oldId -> $newId');
+      }
+    } catch (e) {
+      print('❌ Error updating supplier ID in SQLite: $e');
     }
   }
 }

@@ -23,6 +23,7 @@ class SupplierDetailScreen extends StatefulWidget {
 class _SupplierDetailScreenState extends State<SupplierDetailScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
+  late Supplier _currentSupplier; // Local supplier state
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
   String _selectedPeriod = 'last_30_days';
@@ -37,6 +38,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   @override
   void initState() {
     super.initState();
+    _currentSupplier = widget.supplier; // Initialize current supplier
     _tabController = TabController(
       length: 5,
       vsync: this,
@@ -68,7 +70,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.supplier.name,
+          _currentSupplier.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -126,8 +128,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
                         radius: 25,
                         backgroundColor: Colors.blue,
                         child: Text(
-                          widget.supplier.name.isNotEmpty
-                              ? widget.supplier.name[0].toUpperCase()
+                          _currentSupplier.name.isNotEmpty
+                              ? _currentSupplier.name[0].toUpperCase()
                               : '?',
                           style: const TextStyle(
                             color: Colors.white,
@@ -142,7 +144,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.supplier.name,
+                              _currentSupplier.name,
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -152,7 +154,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Üyelik: ${_formatDate(widget.supplier.createdAt)}',
+                              'Üyelik: ${_formatDate(_currentSupplier.createdAt)}',
                               style: TextStyle(
                                 color: Colors.grey[600],
                                 fontSize: 12,
@@ -169,9 +171,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
 
                   // İletişim Bilgileri
                   _buildInfoRow(Icons.phone, 'Telefon',
-                      widget.supplier.phone ?? 'Belirtilmemiş'),
+                      _currentSupplier.phone ?? 'Belirtilmemiş'),
                   _buildInfoRow(Icons.location_on, 'Adres',
-                      widget.supplier.address ?? 'Belirtilmemiş'),
+                      _currentSupplier.address ?? 'Belirtilmemiş'),
                 ],
               ),
             ),
@@ -1269,10 +1271,99 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   }
 
   void _editSupplier() {
-    // Navigate to edit supplier screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Tedarikçi düzenleme özelliği geliştiriliyor...')),
+    _showSupplierEditDialog();
+  }
+
+  void _showSupplierEditDialog() {
+    final nameController = TextEditingController(text: _currentSupplier.name);
+    final phoneController =
+        TextEditingController(text: _currentSupplier.phone ?? '');
+    final addressController =
+        TextEditingController(text: _currentSupplier.address ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tedarikçi Düzenle'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Tedarikçi Adı *',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: phoneController,
+                decoration: const InputDecoration(
+                  labelText: 'Telefon',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: addressController,
+                decoration: const InputDecoration(
+                  labelText: 'Adres',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Tedarikçi adı zorunludur'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              final updatedSupplier = _currentSupplier.copyWith(
+                name: nameController.text.trim(),
+                phone: phoneController.text.trim().isEmpty
+                    ? null
+                    : phoneController.text.trim(),
+                address: addressController.text.trim().isEmpty
+                    ? null
+                    : addressController.text.trim(),
+                updatedAt: DateTime.now(),
+              );
+
+              context.read<SupplierProvider>().updateSupplier(updatedSupplier);
+
+              // Update local state to reflect changes immediately
+              setState(() {
+                _currentSupplier = updatedSupplier;
+              });
+
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Tedarikçi güncellendi'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            child: const Text('Güncelle'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1349,7 +1440,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text(
-            '${widget.supplier.name} - Alışveriş Ekle',
+            '${_currentSupplier.name} - Alışveriş Ekle',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),

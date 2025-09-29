@@ -1547,12 +1547,13 @@ class FirestoreService {
   // ==========================================
 
   /// Add or update supplier with retry mechanism
-  Future<bool> saveSupplier(String storeId, String? supplierId,
+  /// Returns the Firebase document ID for new suppliers, or the existing ID for updates
+  Future<String?> saveSupplier(String storeId, String? supplierId,
       Map<String, dynamic> supplierData) async {
     // ✅ StoreId validation
     if (storeId.isEmpty) {
       print('❌ SAVESUPPLIER FAILED: StoreId is empty!');
-      return false;
+      return null;
     }
 
     // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
@@ -1575,7 +1576,7 @@ class FirestoreService {
 
           print('✅ New supplier added with Firebase ID: ${docRef.id}');
           print('🔍 DEBUG: Full path: /stores/$storeId/suppliers/${docRef.id}');
-          return true; // Success - exit retry loop
+          return docRef.id; // Return Firebase document ID
         } else {
           // 🔄 Update existing supplier
           print('🔄 Attempt $attempt: Updating existing supplier: $supplierId');
@@ -1587,15 +1588,15 @@ class FirestoreService {
               .update(supplierData);
 
           print('✅ Supplier updated successfully: $supplierId');
-          return true; // Success - exit retry loop
+          return supplierId; // Return existing supplier ID
         }
       } catch (e) {
         print('❌ Firebase saveSupplier error (attempt $attempt): $e');
 
         if (attempt == 3) {
           // Son deneme de başarısız
-          print('💀 All retry attempts failed for saveSupplier');
-          return false;
+          print('� All retry attempts failed for saveSupplier');
+          return null;
         }
 
         // Exponential backoff - wait before retry
@@ -1605,7 +1606,7 @@ class FirestoreService {
       }
     }
 
-    return false; // This shouldn't be reached
+    return null; // This shouldn't be reached
   }
 
   /// Delete supplier with retry mechanism

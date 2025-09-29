@@ -1754,14 +1754,28 @@ class FirestoreService {
 
   /// Get purchases stream for a supplier
   Stream<QuerySnapshot> getPurchasesStream(String storeId, String supplierId) {
-    return _firestore
-        .collection(_collectionStores)
-        .doc(storeId)
-        .collection('suppliers')
-        .doc(supplierId)
-        .collection('purchases')
-        .orderBy('purchaseDate', descending: true)
-        .snapshots();
+    try {
+      print(
+          '🔄 Getting purchases stream for supplier: $supplierId in store: $storeId');
+      return _firestore
+          .collection(_collectionStores)
+          .doc(storeId)
+          .collection('suppliers')
+          .doc(supplierId)
+          .collection('purchases')
+          .orderBy('purchaseDate', descending: true)
+          .snapshots();
+    } catch (e) {
+      print('❌ Error creating purchases stream: $e');
+      // Fallback: orderBy olmadan dene
+      return _firestore
+          .collection(_collectionStores)
+          .doc(storeId)
+          .collection('suppliers')
+          .doc(supplierId)
+          .collection('purchases')
+          .snapshots();
+    }
   }
 
   /// Get all purchases for a store (across all suppliers)
@@ -1771,5 +1785,187 @@ class FirestoreService {
         .where('storeId', isEqualTo: storeId)
         .orderBy('purchaseDate', descending: true)
         .snapshots();
+  }
+
+  // ==========================================
+  // PAYMENT HISTORY OPERATIONS
+  // ==========================================
+
+  /// Save payment/debt transaction to Firebase
+  Future<bool> savePaymentHistory(String storeId, String supplierId,
+      String? transactionId, Map<String, dynamic> paymentData) async {
+    // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        paymentData['lastModified'] = FieldValue.serverTimestamp();
+        paymentData['storeId'] = storeId;
+        paymentData['supplierId'] = supplierId;
+
+        if (transactionId == null) {
+          // 🆕 Add new payment transaction - Firebase generates ID
+          print(
+              '🔄 Attempt $attempt: Adding new payment transaction to Firebase...');
+          final docRef = await _firestore
+              .collection(_collectionStores)
+              .doc(storeId)
+              .collection('suppliers')
+              .doc(supplierId)
+              .collection('supplier_transactions')
+              .add(paymentData);
+
+          print(
+              '✅ New payment transaction added with Firebase ID: ${docRef.id}');
+          return true; // Success - exit retry loop
+        } else {
+          // 🔄 Update existing payment transaction
+          print(
+              '🔄 Attempt $attempt: Updating existing payment transaction: $transactionId');
+          await _firestore
+              .collection(_collectionStores)
+              .doc(storeId)
+              .collection('suppliers')
+              .doc(supplierId)
+              .collection('supplier_transactions')
+              .doc(transactionId)
+              .set(paymentData, SetOptions(merge: true));
+
+          print('✅ Payment transaction updated successfully: $transactionId');
+          return true; // Success - exit retry loop
+        }
+      } catch (e) {
+        print('❌ Firebase savePaymentHistory error (attempt $attempt): $e');
+
+        if (attempt == 3) {
+          // Son deneme de başarısız
+          print('💀 All retry attempts failed for savePaymentHistory');
+          return false;
+        }
+
+        // Exponential backoff - wait before retry
+        final waitTime = Duration(milliseconds: 500 * attempt);
+        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
+        await Future.delayed(waitTime);
+      }
+    }
+
+    return false;
+  }
+
+  /// Get payment history for a specific supplier
+  Future<QuerySnapshot?> getPaymentHistory(
+      String storeId, String supplierId) async {
+    try {
+      print(
+          '🔄 Getting payment history from Firebase for supplier: $supplierId');
+
+      final querySnapshot = await _firestore
+          .collection(_collectionStores)
+          .doc(storeId)
+          .collection('suppliers')
+          .doc(supplierId)
+          .collection('supplier_transactions')
+          .orderBy('created_at', descending: true)
+          .get();
+
+      print(
+          '✅ Payment history retrieved: ${querySnapshot.docs.length} transactions');
+      return querySnapshot;
+    } catch (e) {
+      print('❌ Error getting payment history from Firebase: $e');
+      return null;
+    }
+  }
+
+  /// Get payment history stream for real-time updates
+  Stream<QuerySnapshot> getPaymentHistoryStream(
+      String storeId, String supplierId) {
+    return _firestore
+        .collection(_collectionStores)
+        .doc(storeId)
+        .collection('suppliers')
+        .doc(supplierId)
+        .collection('supplier_transactions')
+        .orderBy('created_at', descending: true)
+        .snapshots();
+  }
+
+  /// Get all payment transactions stream for a store
+  /// NOT IMPLEMENTED - With new schema structure, this would require
+  /// listening to multiple sub-collections simultaneously
+  /// Use getPaymentHistoryStream for specific suppliers instead
+  @deprecated
+  Stream<QuerySnapshot> getAllPaymentTransactionsStream(String storeId) {
+    throw UnimplementedError(
+        'getAllPaymentTransactionsStream is not compatible with new schema structure. Use getPaymentHistoryStream for specific suppliers.');
+  }
+
+  /// Delete payment transaction from Firebase
+  Future<bool> deletePaymentTransaction(
+      String storeId, String supplierId, String transactionId) async {
+    // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        print(
+            '🔄 Attempt $attempt: Deleting payment transaction from Firebase: $transactionId');
+
+        await _firestore
+            .collection(_collectionStores)
+            .doc(storeId)
+            .collection('suppliers')
+            .doc(supplierId)
+            .collection('supplier_transactions')
+            .doc(transactionId)
+            .delete();
+
+        print(
+            '✅ Payment transaction deleted successfully from Firebase: $transactionId');
+        return true; // Success - exit retry loop
+      } catch (e) {
+        print(
+            '❌ Firebase deletePaymentTransaction error (attempt $attempt): $e');
+
+        if (attempt == 3) {
+          // Son deneme de başarısız
+          print('💀 All retry attempts failed for deletePaymentTransaction');
+          return false;
+        }
+
+        // Exponential backoff - wait before retry
+        final waitTime = Duration(milliseconds: 500 * attempt);
+        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
+        await Future.delayed(waitTime);
+      }
+    }
+
+    return false;
+  }
+
+  /// Delete all payment transactions for a specific supplier
+  Future<bool> deleteAllPaymentTransactionsForSupplier(
+      String storeId, String supplierId) async {
+    try {
+      print('🔄 Deleting all payment transactions for supplier: $supplierId');
+
+      final querySnapshot = await _firestore
+          .collection(_collectionStores)
+          .doc(storeId)
+          .collection('suppliers')
+          .doc(supplierId)
+          .collection('supplier_transactions')
+          .get();
+
+      final batch = _firestore.batch();
+      for (final doc in querySnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      await batch.commit();
+      print(
+          '✅ All payment transactions deleted for supplier: $supplierId (${querySnapshot.docs.length} transactions)');
+      return true;
+    } catch (e) {
+      print('❌ Error deleting payment transactions for supplier: $e');
+      return false;
+    }
   }
 }

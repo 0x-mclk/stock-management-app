@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/purchase.dart';
 import '../services/database_service.dart';
@@ -10,6 +11,7 @@ class PurchaseProvider with ChangeNotifier {
   List<Purchase> _purchases = [];
   bool _isLoading = false;
   String? _error;
+  StreamSubscription? _firebaseListener;
 
   List<Purchase> get purchases => _purchases;
   bool get isLoading => _isLoading;
@@ -21,21 +23,48 @@ class PurchaseProvider with ChangeNotifier {
   })  : _databaseService = databaseService ?? DatabaseService.instance,
         _firestoreService = firestoreService ?? FirestoreService.instance;
 
-  /// Load purchases for a specific supplier
-  Future<void> loadPurchasesBySupplier(String supplierId) async {
+  /// Load purchases for a specific supplier with Firebase sync
+  Future<void> loadPurchasesBySupplier(String supplierId,
+      {String? storeId}) async {
     _setLoading(true);
     _error = null;
 
     try {
+      // İlk olarak SQLite'dan yükle
       final purchaseData =
           await _databaseService.getPurchasesBySupplier(supplierId);
       _purchases = purchaseData.map((data) => Purchase.fromMap(data)).toList();
       print(
-          '✅ Loaded ${_purchases.length} purchases for supplier: $supplierId');
+          '✅ Loaded ${_purchases.length} purchases from SQLite for supplier: $supplierId');
+
+      // UI'ı güncelle
+      _setLoading(false);
+
+      // Store ID'yi belirle
+      String? finalStoreId = storeId;
+      if (finalStoreId == null || finalStoreId.isEmpty) {
+        // SQLite'dan store ID çekmeye çalış
+        if (_purchases.isNotEmpty) {
+          finalStoreId = _purchases.first.storeId;
+        } else {
+          // Eğer purchase yoksa, tedarikçi bilgisinden al
+          final supplierData =
+              await _databaseService.getSupplierData(supplierId);
+          if (supplierData != null) {
+            finalStoreId = supplierData['store_id'];
+          }
+        }
+      }
+
+      // Şimdi Firebase listener başlat
+      if (finalStoreId != null && finalStoreId.isNotEmpty) {
+        _startFirebaseSupplierListener(supplierId, finalStoreId);
+      } else {
+        print('❌ Store ID bulunamadı, Firebase listener başlatılamıyor');
+      }
     } catch (e) {
       _error = 'Failed to load purchases: $e';
       print('❌ Error loading purchases: $e');
-    } finally {
       _setLoading(false);
     }
   }
@@ -116,7 +145,7 @@ class PurchaseProvider with ChangeNotifier {
       return true;
     } catch (e) {
       _error = 'Failed to update purchase: $e';
-      print('❌ Error updating purchase: $e');
+      print(' updating purchase: $e');
       notifyListeners();
       return false;
     }
@@ -205,15 +234,133 @@ class PurchaseProvider with ChangeNotifier {
     }
   }
 
+  /// Start Firebase real-time listener for specific supplier purchases
+  void _startFirebaseSupplierListener(String supplierId, String storeId) {
+    _firebaseListener?.cancel(); // Önceki listener'ı iptal et
+
+    try {
+      print(
+          '🔄 Starting Firebase listener for supplier: $supplierId, store: $storeId');
+
+      _firebaseListener =
+          _firestoreService.getPurchasesStream(storeId, supplierId).listen(
+        (snapshot) {
+          print(
+              '🔄 Firebase purchase update received: ${snapshot.docs.length} documents for supplier: $supplierId');
+          _handleFirebaseSupplierPurchaseUpdate(
+              snapshot.docs, supplierId, storeId);
+        },
+        onError: (error) {
+          print('❌ Firebase supplier purchases stream error: $error');
+          _error = 'Firebase sync error: $error';
+          notifyListeners();
+        },
+      );
+    } catch (e) {
+      print('❌ Error starting Firebase supplier purchase listener: $e');
+    }
+  }
+
+  /// Handle Firebase purchase updates for specific supplier
+  void _handleFirebaseSupplierPurchaseUpdate(
+      List<dynamic> docs, String supplierId, String storeId) async {
+    try {
+      final firebasePurchases = docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id; // Firebase document ID
+        // Store ID'yi garantile
+        data['store_id'] = storeId;
+        data['supplier_id'] = supplierId;
+        return Purchase.fromMap(data);
+      }).toList();
+
+      // Firebase'den gelen verileri SQLite'a senkronize et
+      await _syncFirebasePurchasesToSQLite(firebasePurchases, supplierId);
+
+      // UI'ı güncelle
+      _purchases = firebasePurchases;
+      notifyListeners();
+
+      print(
+          '✅ Supplier purchases synced from Firebase: ${firebasePurchases.length} items');
+    } catch (e) {
+      print('❌ Error handling Firebase supplier purchase update: $e');
+    }
+  }
+
+  /// Firebase verilerini SQLite'a senkronize et
+  Future<void> _syncFirebasePurchasesToSQLite(
+      List<Purchase> firebasePurchases, String supplierId) async {
+    try {
+      // Mevcut SQLite verilerini temizle (sadece bu supplier için)
+      await _databaseService.deletePurchasesBySupplier(supplierId);
+
+      // Firebase verilerini SQLite'a ekle - fromFirebase parametresi ile sync döngüsünü önle
+      for (final purchase in firebasePurchases) {
+        final purchaseData = purchase.toMap();
+
+        try {
+          // Update mevcut purchase'ı (fromFirebase=true ile sync döngüsü önlenir)
+          await _databaseService.updatePurchase(purchaseData,
+              fromFirebase: true);
+          print('🔄 Attempt 1: Updating existing purchase: ${purchase.id}');
+        } catch (e) {
+          // Purchase yoksa create et - fromFirebase=true ile sync döngüsü önlenir
+          await _databaseService.createPurchase(purchaseData,
+              fromFirebase: true);
+          print('✅ Purchase created in SQLite: ${purchase.id}');
+        }
+      }
+
+      // Firebase sync sonrası supplier totals'ı doğru hesapla
+      await _recalculateSupplierTotals(supplierId, firebasePurchases);
+
+      print(
+          '✅ ${firebasePurchases.length} purchases synced to SQLite for supplier: $supplierId');
+    } catch (e) {
+      print('❌ Error syncing purchases to SQLite: $e');
+    }
+  }
+
+  /// Firebase sync sonrası supplier totals'ını yeniden hesapla
+  Future<void> _recalculateSupplierTotals(
+      String supplierId, List<Purchase> purchases) async {
+    try {
+      final totalAmount =
+          purchases.fold(0.0, (sum, purchase) => sum + purchase.amount);
+
+      // Supplier'ı doğru totals ile güncelle
+      await _databaseService.recalculateSupplierTotals(supplierId, totalAmount);
+
+      print(
+          '🔄 Recalculated supplier totals for: $supplierId -> Total: $totalAmount');
+    } catch (e) {
+      print('❌ Error recalculating supplier totals: $e');
+    }
+  }
+
+  /// Stop Firebase listener
+  void stopFirebaseListener() {
+    _firebaseListener?.cancel();
+    _firebaseListener = null;
+  }
+
   /// Clear all purchases
   void clearPurchases() {
     _purchases.clear();
     _error = null;
+    stopFirebaseListener();
     notifyListeners();
   }
 
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    stopFirebaseListener();
+    super.dispose();
   }
 }

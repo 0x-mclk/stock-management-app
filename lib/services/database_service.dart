@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/supplier.dart';
+import '../models/purchase.dart';
 import 'firestore_service.dart';
 
 class DatabaseService {
@@ -640,6 +641,28 @@ class DatabaseService {
     }
   }
 
+  /// Get specific supplier data as Map by ID
+  Future<Map<String, dynamic>?> getSupplierData(String supplierId) async {
+    final db = await database;
+
+    try {
+      final maps = await db.query(
+        'suppliers',
+        where: 'id = ?',
+        whereArgs: [supplierId],
+        limit: 1,
+      );
+
+      if (maps.isNotEmpty) {
+        return maps.first;
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error getting supplier data: $e');
+      return null;
+    }
+  }
+
   // ==========================================
   // PRIVATE FIREBASE SYNC METHODS
   // ==========================================
@@ -757,30 +780,41 @@ class DatabaseService {
   // ==================== PURCHASE CRUD OPERATIONS ====================
 
   /// Create new purchase with Firebase sync
-  Future<String?> createPurchase(Map<String, dynamic> purchaseData) async {
+  Future<String?> createPurchase(Map<String, dynamic> purchaseData,
+      {bool fromFirebase = false}) async {
     final db = await database;
     final purchaseId = purchaseData['id'] ??
         'purchase_${DateTime.now().millisecondsSinceEpoch}_${(DateTime.now().microsecond % 1000).toString().padLeft(3, '0')}';
     purchaseData['id'] = purchaseId;
-    purchaseData['created_at'] = DateTime.now().toIso8601String();
-    purchaseData['updated_at'] = DateTime.now().toIso8601String();
+
+    if (!fromFirebase) {
+      purchaseData['created_at'] = DateTime.now().toIso8601String();
+      purchaseData['updated_at'] = DateTime.now().toIso8601String();
+    }
 
     try {
       await db.insert('purchases', purchaseData);
       print('✅ Purchase created in SQLite: $purchaseId');
 
-      // Attempt Firebase sync (non-blocking)
-      _syncPurchaseToFirebase(purchaseData);
+      // Only sync to Firebase if not coming from Firebase
+      if (!fromFirebase) {
+        _syncPurchaseToFirebase(purchaseData, fromFirebase: fromFirebase);
+      }
 
-      // Update supplier totals - with error handling
-      try {
-        await _updateSupplierTotalsAfterPurchase(
-            purchaseData['supplier_id'], purchaseData['amount'].toDouble(),
-            add: true);
+      // Update supplier totals - ONLY if NOT coming from Firebase (prevent double counting)
+      if (!fromFirebase) {
+        try {
+          await _updateSupplierTotalsAfterPurchase(
+              purchaseData['supplier_id'], purchaseData['amount'].toDouble(),
+              add: true);
+          print(
+              '✅ Supplier totals update completed for: ${purchaseData['supplier_id']}');
+        } catch (e) {
+          print('❌ Error calling supplier totals update: $e');
+        }
+      } else {
         print(
-            '✅ Supplier totals update completed for: ${purchaseData['supplier_id']}');
-      } catch (e) {
-        print('❌ Error calling supplier totals update: $e');
+            '🔄 Skipping supplier totals update - data from Firebase: ${purchaseData['supplier_id']}');
       }
 
       return purchaseId;
@@ -791,13 +825,16 @@ class DatabaseService {
   }
 
   /// Update existing purchase with Firebase sync
-  Future<void> updatePurchase(Map<String, dynamic> purchaseData) async {
+  Future<void> updatePurchase(Map<String, dynamic> purchaseData,
+      {bool fromFirebase = false}) async {
     if (purchaseData['id'] == null) {
       throw ArgumentError('Purchase ID cannot be null for update');
     }
 
     final db = await database;
-    purchaseData['updated_at'] = DateTime.now().toIso8601String();
+    if (!fromFirebase) {
+      purchaseData['updated_at'] = DateTime.now().toIso8601String();
+    }
 
     try {
       final rowsAffected = await db.update(
@@ -808,14 +845,16 @@ class DatabaseService {
       );
 
       if (rowsAffected > 0) {
-        print('✅ Purchase updated in SQLite: ${purchaseData['id']}');
-        // Attempt Firebase sync (non-blocking)
-        _syncPurchaseToFirebase(purchaseData);
+        print('✅ Purchase updated: ${purchaseData['id']}');
+        // Only sync to Firebase if not coming from Firebase
+        if (!fromFirebase) {
+          _syncPurchaseToFirebase(purchaseData, fromFirebase: fromFirebase);
+        }
       } else {
         throw Exception('Purchase not found: ${purchaseData['id']}');
       }
     } catch (e) {
-      print('❌ Error updating purchase: $e');
+      print(' updating purchase: $e');
       rethrow;
     }
   }
@@ -887,15 +926,44 @@ class DatabaseService {
     );
   }
 
+  /// Delete all purchases for a specific supplier
+  Future<void> deletePurchasesBySupplier(String supplierId) async {
+    try {
+      final db = await database;
+      await db.delete(
+        'purchases',
+        where: 'supplier_id = ?',
+        whereArgs: [supplierId],
+      );
+      print('✅ Deleted all purchases for supplier: $supplierId');
+    } catch (e) {
+      print('❌ Error deleting purchases for supplier: $e');
+      rethrow;
+    }
+  }
+
   /// Sync purchase to Firebase (private method)
-  void _syncPurchaseToFirebase(Map<String, dynamic> purchaseData) async {
+  void _syncPurchaseToFirebase(Map<String, dynamic> purchaseData,
+      {bool fromFirebase = false}) async {
+    // Prevent sync loops - don't sync back to Firebase if data came from Firebase
+    if (fromFirebase) {
+      print(
+          '🔄 Skipping Firebase sync - data originated from Firebase: ${purchaseData['id']}');
+      return;
+    }
+
     try {
       final firestoreService = FirestoreService.instance;
+
+      // Convert SQLite format to Firebase format using Purchase model
+      final purchase = Purchase.fromMap(purchaseData);
+      final firebaseData = purchase.toFirebaseMap();
+
       final success = await firestoreService.savePurchase(
         purchaseData['store_id'],
         purchaseData['supplier_id'],
         purchaseData['id'],
-        purchaseData,
+        firebaseData, // Firebase formatında data gönder
       );
 
       if (success) {
@@ -1128,6 +1196,48 @@ class DatabaseService {
       }
     } catch (e) {
       print('❌ Error updating supplier totals directly: $e');
+    }
+  }
+
+  /// Recalculate supplier totals with exact amount (for Firebase sync)
+  Future<void> recalculateSupplierTotals(
+      String supplierId, double totalAmount) async {
+    final db = await database;
+
+    try {
+      final suppliers = await db.query(
+        'suppliers',
+        where: 'id = ?',
+        whereArgs: [supplierId],
+      );
+
+      if (suppliers.isNotEmpty) {
+        await db.update(
+          'suppliers',
+          {
+            'total_purchases': totalAmount,
+            'monthly_purchases':
+                totalAmount, // Basit hesaplama - ilerisi için geliştirilebilir
+            'yearly_purchases': totalAmount,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [supplierId],
+        );
+
+        // Firebase'e sync et
+        final supplierData = Map<String, dynamic>.from(suppliers.first);
+        supplierData['total_purchases'] = totalAmount;
+        supplierData['monthly_purchases'] = totalAmount;
+        supplierData['yearly_purchases'] = totalAmount;
+        supplierData['updated_at'] = DateTime.now().toIso8601String();
+        _syncSupplierToFirebase(supplierData);
+
+        print(
+            '✅ Supplier totals recalculated: $supplierId -> Total: $totalAmount');
+      }
+    } catch (e) {
+      print('❌ Error recalculating supplier totals: $e');
     }
   }
 

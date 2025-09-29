@@ -43,12 +43,12 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
       initialIndex: widget.initialTabIndex,
     ); // 4'ten 5'e çıkarıldı
 
-    // ✅ Purchase provider'ı başlat
+    // ✅ Purchase provider'ı başlat - storeId ile birlikte
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && widget.supplier.id != null) {
-        context
-            .read<PurchaseProvider>()
-            .loadPurchasesBySupplier(widget.supplier.id!);
+        context.read<PurchaseProvider>().loadPurchasesBySupplier(
+            widget.supplier.id!,
+            storeId: widget.supplier.storeId);
       }
     });
   }
@@ -56,6 +56,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    // Firebase listener'ını temizle
+    if (mounted) {
+      context.read<PurchaseProvider>().stopFirebaseListener();
+    }
     super.dispose();
   }
 

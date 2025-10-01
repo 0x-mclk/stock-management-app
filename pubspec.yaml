@@ -10,6 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # Firebase - Updated versions
   firebase_core: ^3.6.0
@@ -57,7 +59,7 @@ dependencies:
   flutter_local_notifications: ^17.2.3
 
   # Date & Time
-  intl: ^0.18.1
+  intl: ^0.20.2
 
   # Utils
   uuid: ^4.2.1

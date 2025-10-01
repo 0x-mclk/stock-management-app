@@ -6,7 +6,7 @@ import '../models/product.dart';
 import '../utils/currency_formatter.dart';
 import 'barcode_scanner_screen.dart';
 import 'add_product_with_camera_screen.dart';
-import 'qr_product_analysis_screen.dart';
+import '../utils/navigation_helper.dart';
 
 // Excel import/export
 import 'package:file_picker/file_picker.dart';
@@ -1038,13 +1038,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   // Navigate to product analysis with selected product
   void _navigateToProductAnalysis(Product product) {
-    Navigator.push(
+    NavigationHelper.openProductAnalysis(
       context,
-      MaterialPageRoute(
-        builder: (context) => QRProductAnalysisScreen(
-          preSelectedProduct: product,
-        ),
-      ),
+      product: product,
+      source: 'products',
     );
   }
 }

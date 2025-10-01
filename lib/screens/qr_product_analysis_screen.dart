@@ -29,6 +29,13 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
   late TabController _tabController;
   DateTimeRange? _customDateRange;
 
+  // Grafik türü seçimi için state
+  String _selectedAnalysisType = 'sales'; // 'sales', 'revenue', 'profit'
+
+  // Aylık analiz için seçili ay
+  int _selectedMonth = DateTime.now().month;
+  int _selectedYear = DateTime.now().year;
+
   final TextEditingController _searchController = TextEditingController();
   List<Product> _filteredProducts = [];
 
@@ -41,7 +48,7 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
 
     // If a product is pre-selected, skip selection screen and show analysis
     if (widget.preSelectedProduct != null) {
@@ -201,6 +208,25 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
     double totalRevenue = 0;
     int totalQuantity = 0;
 
+    // Kar hesaplamaları için
+    double todayProfit = 0;
+    double weekProfit = 0;
+    double monthProfit = 0;
+    double customProfit = 0;
+    double totalProfit = 0;
+
+    // Günlük kar verisi
+    Map<String, double> dailyProfits = {};
+    Map<String, double> weeklyProfits = {};
+    Map<String, double> monthlyProfits = {};
+    Map<String, double> customRangeProfits = {};
+
+    // Günlük ciro verisi
+    Map<String, double> dailyRevenues = {};
+    Map<String, double> weeklyRevenues = {};
+    Map<String, double> monthlyRevenues = {};
+    Map<String, double> customRangeRevenues = {};
+
     for (var sale in sales) {
       for (var item in sale.items) {
         if (item.productName == product.name) {
@@ -213,31 +239,50 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
           totalQuantity += item.quantity;
           totalRevenue += item.totalPrice;
 
+          // Kar hesaplama (Satış Fiyatı - Alış Fiyatı)
+          double itemProfit =
+              (product.salePrice - (product.purchasePrice ?? 0)) *
+                  item.quantity;
+          totalProfit += itemProfit;
+
           // Günlük analiz
           if (saleDate.isAtSameMomentAs(today)) {
             todaySales += item.quantity;
+            todayProfit += itemProfit;
           }
 
           // Haftalık analiz
           if (saleDate.isAfter(weekAgo) &&
               saleDate.isBefore(today.add(const Duration(days: 1)))) {
             weekSales += item.quantity;
+            weekProfit += itemProfit;
             final weekKey = '${saleDate.day}.${saleDate.month}';
             weeklySales[weekKey] = (weeklySales[weekKey] ?? 0) + item.quantity;
+            weeklyProfits[weekKey] = (weeklyProfits[weekKey] ?? 0) + itemProfit;
+            weeklyRevenues[weekKey] =
+                (weeklyRevenues[weekKey] ?? 0) + item.totalPrice;
           }
 
           // Aylık analiz
           if (saleDate.isAfter(monthAgo) &&
               saleDate.isBefore(today.add(const Duration(days: 1)))) {
             monthSales += item.quantity;
+            monthProfit += itemProfit;
             final monthKey = '${saleDate.day}.${saleDate.month}';
             monthlySales[monthKey] =
                 (monthlySales[monthKey] ?? 0) + item.quantity;
+            monthlyProfits[monthKey] =
+                (monthlyProfits[monthKey] ?? 0) + itemProfit;
+            monthlyRevenues[monthKey] =
+                (monthlyRevenues[monthKey] ?? 0) + item.totalPrice;
           }
 
           // Günlük detay
           final dayKey = DateFormat('dd.MM').format(saleDate);
           dailySales[dayKey] = (dailySales[dayKey] ?? 0) + item.quantity;
+          dailyProfits[dayKey] = (dailyProfits[dayKey] ?? 0) + itemProfit;
+          dailyRevenues[dayKey] =
+              (dailyRevenues[dayKey] ?? 0) + item.totalPrice;
 
           // Özel tarih aralığı
           if (_customDateRange != null) {
@@ -255,9 +300,14 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
             if (saleDate.isAfter(startDate.subtract(const Duration(days: 1))) &&
                 saleDate.isBefore(endDate.add(const Duration(days: 1)))) {
               customSales += item.quantity;
+              customProfit += itemProfit;
               final customKey = DateFormat('dd.MM').format(saleDate);
               customRangeSales[customKey] =
                   (customRangeSales[customKey] ?? 0) + item.quantity;
+              customRangeProfits[customKey] =
+                  (customRangeProfits[customKey] ?? 0) + itemProfit;
+              customRangeRevenues[customKey] =
+                  (customRangeRevenues[customKey] ?? 0) + item.totalPrice;
             }
           }
         }
@@ -275,6 +325,77 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
       'customRangeSales': customRangeSales,
       'totalRevenue': totalRevenue,
       'totalQuantity': totalQuantity,
+      'todayProfit': todayProfit,
+      'weekProfit': weekProfit,
+      'monthProfit': monthProfit,
+      'customProfit': customProfit,
+      'totalProfit': totalProfit,
+      'dailyProfits': dailyProfits,
+      'weeklyProfits': weeklyProfits,
+      'monthlyProfits': monthlyProfits,
+      'customRangeProfits': customRangeProfits,
+      'dailyRevenues': dailyRevenues,
+      'weeklyRevenues': weeklyRevenues,
+      'monthlyRevenues': monthlyRevenues,
+      'customRangeRevenues': customRangeRevenues,
+    };
+  }
+
+  // Stok hızı hesaplama fonksiyonu
+  Map<String, dynamic> _calculateStockVelocity(
+      Product product, List<Sale> sales) {
+    final DateTime now = DateTime.now();
+    final DateTime thirtyDaysAgo = now.subtract(const Duration(days: 30));
+
+    // Son 30 gündeki toplam satış miktarını hesapla
+    int totalSalesLast30Days = 0;
+
+    for (final sale in sales) {
+      final saleDate = sale.createdAt;
+
+      // Son 30 gün içinde mi kontrol et
+      if (saleDate.isAfter(thirtyDaysAgo) &&
+          saleDate.isBefore(now.add(const Duration(days: 1)))) {
+        // Bu ürünün satış miktarını bul
+        for (final item in sale.items) {
+          if (item.productName == product.name) {
+            totalSalesLast30Days += item.quantity;
+          }
+        }
+      }
+    }
+
+    // Günlük ortalama satış hızını hesapla
+    double dailySalesRate = totalSalesLast30Days / 30.0;
+
+    // Kalan gün hesaplama
+    int remainingDays = 0;
+    String statusMessage = '';
+
+    if (dailySalesRate <= 0) {
+      statusMessage = 'Satış verisi yok';
+      remainingDays = 0;
+    } else if (product.stock <= 0) {
+      statusMessage = 'Stok yok';
+      remainingDays = 0;
+    } else {
+      remainingDays = (product.stock / dailySalesRate).floor();
+      if (remainingDays <= 0) {
+        statusMessage = 'Stok bitmiş';
+      } else if (remainingDays <= 7) {
+        statusMessage = 'Kritik seviye';
+      } else if (remainingDays <= 15) {
+        statusMessage = 'Dikkat';
+      } else {
+        statusMessage = 'Normal';
+      }
+    }
+
+    return {
+      'dailySalesRate': dailySalesRate,
+      'remainingDays': remainingDays,
+      'totalSalesLast30Days': totalSalesLast30Days,
+      'statusMessage': statusMessage,
     };
   }
 
@@ -313,7 +434,7 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ürün Analizi'),
+        title: const Text('Ürün analizi'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
@@ -628,6 +749,40 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
                   ),
                 ],
               ),
+              const SizedBox(height: 4),
+              // Stok Hızı ve Kalan Süre Bilgileri
+              Consumer<SalesProvider>(
+                builder: (context, salesProvider, child) {
+                  final stockVelocity = _calculateStockVelocity(
+                      _scannedProduct!, salesProvider.sales);
+                  return Row(
+                    children: [
+                      Icon(Icons.speed, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Satış Hızı: ${stockVelocity['dailySalesRate'].toStringAsFixed(1)}',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(width: 16),
+                      Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Kalan Süre: ${stockVelocity['remainingDays']} gün',
+                        style: TextStyle(
+                          color: stockVelocity['remainingDays'] <= 7
+                              ? Colors.red
+                              : stockVelocity['remainingDays'] <= 15
+                                  ? Colors.orange
+                                  : Colors.grey[600],
+                          fontWeight: stockVelocity['remainingDays'] <= 15
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -641,7 +796,6 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
           indicatorColor: Colors.blue,
           tabs: const [
             Tab(text: 'Günlük'),
-            Tab(text: 'Haftalık'),
             Tab(text: 'Aylık'),
             Tab(text: 'Özel Tarih'),
           ],
@@ -653,7 +807,6 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
             controller: _tabController,
             children: [
               _buildDailyAnalysis(),
-              _buildWeeklyAnalysis(),
               _buildMonthlyAnalysis(),
               _buildCustomRangeAnalysis(),
             ],
@@ -666,176 +819,164 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
   Widget _buildDailyAnalysis() {
     final analysis = _productAnalysis!;
     final todaySales = analysis['todaySales'] as int;
+    final todayRevenue = todaySales * _scannedProduct!.salePrice;
+    final todayProfit = analysis['todayProfit'] as double;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Bugünkü Satış Kartı
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  const Icon(Icons.today, size: 48, color: Colors.blue),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Bugünkü Satış',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '$todaySales adet',
-                    style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Gelir: ${_currencyFormat.format(todaySales * _scannedProduct!.salePrice)}',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Son 7 Gün Grafiği
-          if ((analysis['dailySales'] as Map<String, int>).isNotEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Son 7 Gün Satış Trendi',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 250,
-                      child: SfCartesianChart(
-                        primaryXAxis: const CategoryAxis(),
-                        primaryYAxis: const NumericAxis(),
-                        tooltipBehavior: TooltipBehavior(enable: true),
-                        series: <CartesianSeries>[
-                          LineSeries<MapEntry<String, int>, String>(
-                            dataSource:
-                                (analysis['dailySales'] as Map<String, int>)
-                                    .entries
-                                    .toList()
-                                    .take(7)
-                                    .toList(),
-                            xValueMapper: (MapEntry<String, int> data, _) =>
-                                data.key,
-                            yValueMapper: (MapEntry<String, int> data, _) =>
-                                data.value,
-                            name: 'Satış Adedi',
-                            color: Colors.blue,
-                            markerSettings:
-                                const MarkerSettings(isVisible: true),
-                            dataLabelSettings:
-                                const DataLabelSettings(isVisible: true),
+          // Üç Kart Yan Yana
+          Row(
+            children: [
+              // Satış Kartı (Sol)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedAnalysisType = 'sales'),
+                  child: Card(
+                    elevation: _selectedAnalysisType == 'sales' ? 8 : 2,
+                    color: _selectedAnalysisType == 'sales'
+                        ? Colors.blue.shade50
+                        : Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Icon(Icons.shopping_cart,
+                              size: 32,
+                              color: _selectedAnalysisType == 'sales'
+                                  ? Colors.blue
+                                  : Colors.grey[600]),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Satış',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'sales'
+                                  ? Colors.blue
+                                  : Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$todaySales adet',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'sales'
+                                  ? Colors.blue
+                                  : Colors.grey[800],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeeklyAnalysis() {
-    final analysis = _productAnalysis!;
-    final weekSales = analysis['weekSales'] as int;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // Bu Haftaki Satış Kartı
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  const Icon(Icons.date_range, size: 48, color: Colors.green),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Bu Haftaki Satış',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '$weekSales adet',
-                    style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Gelir: ${_currencyFormat.format(weekSales * _scannedProduct!.salePrice)}',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Haftalık Detay Grafiği
-          if ((analysis['weeklySales'] as Map<String, int>).isNotEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Haftalık Satış Detayı',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 250,
-                      child: SfCartesianChart(
-                        primaryXAxis: const CategoryAxis(),
-                        primaryYAxis: const NumericAxis(),
-                        tooltipBehavior: TooltipBehavior(enable: true),
-                        series: <CartesianSeries>[
-                          ColumnSeries<MapEntry<String, int>, String>(
-                            dataSource:
-                                (analysis['weeklySales'] as Map<String, int>)
-                                    .entries
-                                    .toList(),
-                            xValueMapper: (MapEntry<String, int> data, _) =>
-                                data.key,
-                            yValueMapper: (MapEntry<String, int> data, _) =>
-                                data.value,
-                            name: 'Satış Adedi',
-                            color: Colors.green,
-                            dataLabelSettings:
-                                const DataLabelSettings(isVisible: true),
+              const SizedBox(width: 8),
+              // Ciro Kartı (Orta)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () =>
+                      setState(() => _selectedAnalysisType = 'revenue'),
+                  child: Card(
+                    elevation: _selectedAnalysisType == 'revenue' ? 8 : 2,
+                    color: _selectedAnalysisType == 'revenue'
+                        ? Colors.green.shade50
+                        : Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Icon(Icons.monetization_on,
+                              size: 32,
+                              color: _selectedAnalysisType == 'revenue'
+                                  ? Colors.green
+                                  : Colors.grey[600]),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Ciro',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'revenue'
+                                  ? Colors.green
+                                  : Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(todayRevenue),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'revenue'
+                                  ? Colors.green
+                                  : Colors.grey[800],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 8),
+              // Kar Kartı (Sağ)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedAnalysisType = 'profit'),
+                  child: Card(
+                    elevation: _selectedAnalysisType == 'profit' ? 8 : 2,
+                    color: _selectedAnalysisType == 'profit'
+                        ? Colors.orange.shade50
+                        : Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Icon(Icons.trending_up,
+                              size: 32,
+                              color: _selectedAnalysisType == 'profit'
+                                  ? Colors.orange
+                                  : Colors.grey[600]),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Kar',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'profit'
+                                  ? Colors.orange
+                                  : Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(todayProfit),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'profit'
+                                  ? Colors.orange
+                                  : Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Dinamik Grafik
+          _buildDynamicChart(analysis, 'daily'),
         ],
       ),
     );
@@ -843,87 +984,168 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
 
   Widget _buildMonthlyAnalysis() {
     final analysis = _productAnalysis!;
-    final monthSales = analysis['monthSales'] as int;
+
+    // Seçili aya göre verileri hesapla
+    final selectedMonthData = _calculateSelectedMonthData();
+    final monthSales = selectedMonthData['sales'] as int;
+    final monthRevenue = selectedMonthData['revenue'] as double;
+    final monthProfit = selectedMonthData['profit'] as double;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Bu Ayki Satış Kartı
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  const Icon(Icons.calendar_month,
-                      size: 48, color: Colors.orange),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Bu Ayki Satış',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '$monthSales adet',
-                    style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Gelir: ${_currencyFormat.format(monthSales * _scannedProduct!.salePrice)}',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Aylık Detay Grafiği
-          if ((analysis['monthlySales'] as Map<String, int>).isNotEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Aylık Satış Detayı',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 250,
-                      child: SfCartesianChart(
-                        primaryXAxis: const CategoryAxis(),
-                        primaryYAxis: const NumericAxis(),
-                        tooltipBehavior: TooltipBehavior(enable: true),
-                        series: <CartesianSeries>[
-                          ColumnSeries<MapEntry<String, int>, String>(
-                            dataSource:
-                                (analysis['monthlySales'] as Map<String, int>)
-                                    .entries
-                                    .toList(),
-                            xValueMapper: (MapEntry<String, int> data, _) =>
-                                data.key,
-                            yValueMapper: (MapEntry<String, int> data, _) =>
-                                data.value,
-                            name: 'Satış Adedi',
-                            color: Colors.orange,
-                            dataLabelSettings:
-                                const DataLabelSettings(isVisible: true),
+          // Üç Kart Yan Yana
+          Row(
+            children: [
+              // Satış Kartı (Sol)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedAnalysisType = 'sales'),
+                  child: Card(
+                    elevation: _selectedAnalysisType == 'sales' ? 8 : 2,
+                    color: _selectedAnalysisType == 'sales'
+                        ? Colors.blue.shade50
+                        : Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Icon(Icons.shopping_cart,
+                              size: 32,
+                              color: _selectedAnalysisType == 'sales'
+                                  ? Colors.blue
+                                  : Colors.grey[600]),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Satış',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'sales'
+                                  ? Colors.blue
+                                  : Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$monthSales adet',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'sales'
+                                  ? Colors.blue
+                                  : Colors.grey[800],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 8),
+              // Ciro Kartı (Orta)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () =>
+                      setState(() => _selectedAnalysisType = 'revenue'),
+                  child: Card(
+                    elevation: _selectedAnalysisType == 'revenue' ? 8 : 2,
+                    color: _selectedAnalysisType == 'revenue'
+                        ? Colors.green.shade50
+                        : Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Icon(Icons.monetization_on,
+                              size: 32,
+                              color: _selectedAnalysisType == 'revenue'
+                                  ? Colors.green
+                                  : Colors.grey[600]),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Ciro',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'revenue'
+                                  ? Colors.green
+                                  : Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(monthRevenue),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'revenue'
+                                  ? Colors.green
+                                  : Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Kar Kartı (Sağ)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedAnalysisType = 'profit'),
+                  child: Card(
+                    elevation: _selectedAnalysisType == 'profit' ? 8 : 2,
+                    color: _selectedAnalysisType == 'profit'
+                        ? Colors.orange.shade50
+                        : Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Icon(Icons.trending_up,
+                              size: 32,
+                              color: _selectedAnalysisType == 'profit'
+                                  ? Colors.orange
+                                  : Colors.grey[600]),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Kar',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'profit'
+                                  ? Colors.orange
+                                  : Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(monthProfit),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedAnalysisType == 'profit'
+                                  ? Colors.orange
+                                  : Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Dinamik Grafik - Ay Seçimi ile
+          _buildMonthlyDynamicChart(analysis),
 
           const SizedBox(height: 16),
 
@@ -1009,81 +1231,161 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
           if (_customDateRange != null) ...[
             const SizedBox(height: 16),
 
-            // Özel Tarih Aralığı Satış Kartı
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    const Icon(Icons.analytics, size: 48, color: Colors.purple),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Seçili Dönem Satışı',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '$customSales adet',
-                      style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.purple),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Gelir: ${_currencyFormat.format(customSales * _scannedProduct!.salePrice)}',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Özel Tarih Aralığı Grafiği
-            if ((analysis['customRangeSales'] as Map<String, int>).isNotEmpty)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Seçili Dönem Detayı (${DateFormat('dd.MM.yyyy').format(_customDateRange!.start)} - ${DateFormat('dd.MM.yyyy').format(_customDateRange!.end)})',
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 250,
-                        child: SfCartesianChart(
-                          primaryXAxis: const CategoryAxis(),
-                          primaryYAxis: const NumericAxis(),
-                          tooltipBehavior: TooltipBehavior(enable: true),
-                          series: <CartesianSeries>[
-                            ColumnSeries<MapEntry<String, int>, String>(
-                              dataSource: (analysis['customRangeSales']
-                                      as Map<String, int>)
-                                  .entries
-                                  .toList(),
-                              xValueMapper: (MapEntry<String, int> data, _) =>
-                                  data.key,
-                              yValueMapper: (MapEntry<String, int> data, _) =>
-                                  data.value,
-                              name: 'Satış Adedi',
-                              color: Colors.purple,
-                              dataLabelSettings:
-                                  const DataLabelSettings(isVisible: true),
+            // Üç Kart Yan Yana
+            Row(
+              children: [
+                // Satış Kartı (Sol)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => _selectedAnalysisType = 'sales'),
+                    child: Card(
+                      elevation: _selectedAnalysisType == 'sales' ? 8 : 2,
+                      color: _selectedAnalysisType == 'sales'
+                          ? Colors.blue.shade50
+                          : Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Icon(Icons.shopping_cart,
+                                size: 32,
+                                color: _selectedAnalysisType == 'sales'
+                                    ? Colors.blue
+                                    : Colors.grey[600]),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Satış',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: _selectedAnalysisType == 'sales'
+                                    ? Colors.blue
+                                    : Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$customSales adet',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: _selectedAnalysisType == 'sales'
+                                    ? Colors.blue
+                                    : Colors.grey[800],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                // Ciro Kartı (Orta)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => _selectedAnalysisType = 'revenue'),
+                    child: Card(
+                      elevation: _selectedAnalysisType == 'revenue' ? 8 : 2,
+                      color: _selectedAnalysisType == 'revenue'
+                          ? Colors.green.shade50
+                          : Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Icon(Icons.monetization_on,
+                                size: 32,
+                                color: _selectedAnalysisType == 'revenue'
+                                    ? Colors.green
+                                    : Colors.grey[600]),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Ciro',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: _selectedAnalysisType == 'revenue'
+                                    ? Colors.green
+                                    : Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _currencyFormat.format(
+                                  customSales * _scannedProduct!.salePrice),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: _selectedAnalysisType == 'revenue'
+                                    ? Colors.green
+                                    : Colors.grey[800],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Kar Kartı (Sağ)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => _selectedAnalysisType = 'profit'),
+                    child: Card(
+                      elevation: _selectedAnalysisType == 'profit' ? 8 : 2,
+                      color: _selectedAnalysisType == 'profit'
+                          ? Colors.orange.shade50
+                          : Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Icon(Icons.trending_up,
+                                size: 32,
+                                color: _selectedAnalysisType == 'profit'
+                                    ? Colors.orange
+                                    : Colors.grey[600]),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Kar',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: _selectedAnalysisType == 'profit'
+                                    ? Colors.orange
+                                    : Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _currencyFormat
+                                  .format(analysis['customProfit'] as double),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: _selectedAnalysisType == 'profit'
+                                    ? Colors.orange
+                                    : Colors.grey[800],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Dinamik Grafik
+            _buildDynamicChart(analysis, 'custom'),
           ],
 
           if (_customDateRange == null)
@@ -1140,6 +1442,379 @@ class _QRProductAnalysisScreenState extends State<QRProductAnalysisScreen>
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+
+  // Seçili ay için verileri hesapla
+  Map<String, dynamic> _calculateSelectedMonthData() {
+    final salesProvider = Provider.of<SalesProvider>(context, listen: false);
+    final sales = salesProvider.sales;
+
+    int monthSales = 0;
+    double monthRevenue = 0;
+    double monthProfit = 0;
+
+    for (var sale in sales) {
+      if (sale.createdAt.month == _selectedMonth &&
+          sale.createdAt.year == _selectedYear) {
+        for (var item in sale.items) {
+          if (item.productName == _scannedProduct!.name) {
+            monthSales += item.quantity;
+            monthRevenue += item.totalPrice;
+            double itemProfit = ((_scannedProduct!.salePrice -
+                    (_scannedProduct!.purchasePrice ?? 0)) *
+                item.quantity);
+            monthProfit += itemProfit;
+          }
+        }
+      }
+    }
+
+    return {
+      'sales': monthSales,
+      'revenue': monthRevenue,
+      'profit': monthProfit,
+    };
+  }
+
+  Widget _buildDynamicChart(Map<String, dynamic> analysis, String period) {
+    String chartTitle;
+    Color chartColor;
+    Map<String, dynamic> chartData;
+
+    // Grafik türüne göre veri ve stil belirleme
+    switch (_selectedAnalysisType) {
+      case 'sales':
+        chartTitle = 'Satış Trendi';
+        chartColor = Colors.blue;
+        chartData = _getSalesChartData(analysis, period);
+        break;
+      case 'revenue':
+        chartTitle = 'Ciro Trendi';
+        chartColor = Colors.green;
+        chartData = _getRevenueChartData(analysis, period);
+        break;
+      case 'profit':
+        chartTitle = 'Kar Trendi';
+        chartColor = Colors.orange;
+        chartData = _getProfitChartData(analysis, period);
+        break;
+      default:
+        chartTitle = 'Satış Trendi';
+        chartColor = Colors.blue;
+        chartData = _getSalesChartData(analysis, period);
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              chartTitle,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 250,
+              child: SfCartesianChart(
+                primaryXAxis: const CategoryAxis(),
+                primaryYAxis: const NumericAxis(),
+                tooltipBehavior: TooltipBehavior(enable: true),
+                series: <CartesianSeries>[
+                  if (period == 'daily' || period == 'monthly')
+                    LineSeries<MapEntry<String, dynamic>, String>(
+                      dataSource: chartData['data'],
+                      xValueMapper: (MapEntry<String, dynamic> data, _) =>
+                          data.key,
+                      yValueMapper: (MapEntry<String, dynamic> data, _) =>
+                          data.value,
+                      name: chartData['label'],
+                      color: chartColor,
+                      markerSettings: const MarkerSettings(isVisible: true),
+                      dataLabelSettings:
+                          const DataLabelSettings(isVisible: true),
+                    )
+                  else
+                    ColumnSeries<MapEntry<String, dynamic>, String>(
+                      dataSource: chartData['data'],
+                      xValueMapper: (MapEntry<String, dynamic> data, _) =>
+                          data.key,
+                      yValueMapper: (MapEntry<String, dynamic> data, _) =>
+                          data.value,
+                      name: chartData['label'],
+                      color: chartColor,
+                      dataLabelSettings:
+                          const DataLabelSettings(isVisible: true),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _getSalesChartData(
+      Map<String, dynamic> analysis, String period) {
+    Map<String, int> data;
+    String label = 'Satış Adedi';
+
+    switch (period) {
+      case 'daily':
+        data = analysis['dailySales'] as Map<String, int>;
+        return {
+          'data': data.entries.toList().take(7).toList().reversed.toList(),
+          'label': label,
+        };
+      case 'weekly':
+        data = analysis['weeklySales'] as Map<String, int>;
+        break;
+      case 'monthly':
+        data = analysis['monthlySales'] as Map<String, int>;
+        // Seçili aya göre filtrele ve sırala
+        var selectedMonthEntries = data.entries.where((entry) {
+          var parts = entry.key.split('.');
+          return int.parse(parts[1]) == _selectedMonth;
+        }).toList()
+          ..sort((a, b) {
+            var partsA = a.key.split('.');
+            var partsB = b.key.split('.');
+            return int.parse(partsA[0]).compareTo(int.parse(partsB[0]));
+          });
+        return {
+          'data': selectedMonthEntries,
+          'label': label,
+        };
+      case 'custom':
+        data = analysis['customRangeSales'] as Map<String, int>;
+        break;
+      default:
+        data = analysis['dailySales'] as Map<String, int>;
+    }
+
+    return {
+      'data': data.entries.toList(),
+      'label': label,
+    };
+  }
+
+  Map<String, dynamic> _getRevenueChartData(
+      Map<String, dynamic> analysis, String period) {
+    Map<String, double> data;
+    String label = 'Ciro (₺)';
+
+    switch (period) {
+      case 'daily':
+        data = analysis['dailyRevenues'] as Map<String, double>;
+        return {
+          'data': data.entries.toList().take(7).toList().reversed.toList(),
+          'label': label,
+        };
+      case 'weekly':
+        data = analysis['weeklyRevenues'] as Map<String, double>;
+        break;
+      case 'monthly':
+        data = analysis['monthlyRevenues'] as Map<String, double>;
+        // Seçili aya göre filtrele ve sırala
+        var selectedMonthEntries = data.entries.where((entry) {
+          var parts = entry.key.split('.');
+          return int.parse(parts[1]) == _selectedMonth;
+        }).toList()
+          ..sort((a, b) {
+            var partsA = a.key.split('.');
+            var partsB = b.key.split('.');
+            return int.parse(partsA[0]).compareTo(int.parse(partsB[0]));
+          });
+        return {
+          'data': selectedMonthEntries,
+          'label': label,
+        };
+      case 'custom':
+        data = analysis['customRangeRevenues'] as Map<String, double>;
+        break;
+      default:
+        data = analysis['dailyRevenues'] as Map<String, double>;
+    }
+
+    return {
+      'data': data.entries.toList(),
+      'label': label,
+    };
+  }
+
+  Map<String, dynamic> _getProfitChartData(
+      Map<String, dynamic> analysis, String period) {
+    Map<String, double> data;
+    String label = 'Kar (₺)';
+
+    switch (period) {
+      case 'daily':
+        data = analysis['dailyProfits'] as Map<String, double>;
+        return {
+          'data': data.entries.toList().take(7).toList().reversed.toList(),
+          'label': label,
+        };
+      case 'weekly':
+        data = analysis['weeklyProfits'] as Map<String, double>;
+        break;
+      case 'monthly':
+        data = analysis['monthlyProfits'] as Map<String, double>;
+        // Seçili aya göre filtrele ve sırala
+        var selectedMonthEntries = data.entries.where((entry) {
+          var parts = entry.key.split('.');
+          return int.parse(parts[1]) == _selectedMonth;
+        }).toList()
+          ..sort((a, b) {
+            var partsA = a.key.split('.');
+            var partsB = b.key.split('.');
+            return int.parse(partsA[0]).compareTo(int.parse(partsB[0]));
+          });
+        return {
+          'data': selectedMonthEntries,
+          'label': label,
+        };
+      case 'custom':
+        data = analysis['customRangeProfits'] as Map<String, double>;
+        break;
+      default:
+        data = analysis['dailyProfits'] as Map<String, double>;
+    }
+
+    return {
+      'data': data.entries.toList(),
+      'label': label,
+    };
+  }
+
+  // Ay isimleri
+  final List<String> _monthNames = [
+    'Ocak',
+    'Şubat',
+    'Mart',
+    'Nisan',
+    'Mayıs',
+    'Haziran',
+    'Temmuz',
+    'Ağustos',
+    'Eylül',
+    'Ekim',
+    'Kasım',
+    'Aralık'
+  ];
+
+  // Aylık grafik için özel dinamik grafik fonksiyonu
+  Widget _buildMonthlyDynamicChart(Map<String, dynamic> analysis) {
+    String chartTitle;
+    Color chartColor;
+    Map<String, dynamic> chartData;
+
+    // Grafik türüne göre veri ve stil belirleme
+    switch (_selectedAnalysisType) {
+      case 'sales':
+        chartTitle = 'Satış Trendi';
+        chartColor = Colors.blue;
+        chartData = _getSalesChartData(analysis, 'monthly');
+        break;
+      case 'revenue':
+        chartTitle = 'Ciro Trendi';
+        chartColor = Colors.green;
+        chartData = _getRevenueChartData(analysis, 'monthly');
+        break;
+      case 'profit':
+        chartTitle = 'Kar Trendi';
+        chartColor = Colors.orange;
+        chartData = _getProfitChartData(analysis, 'monthly');
+        break;
+      default:
+        chartTitle = 'Satış Trendi';
+        chartColor = Colors.blue;
+        chartData = _getSalesChartData(analysis, 'monthly');
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Başlık ve Ay Seçimi
+            Row(
+              children: [
+                Text(
+                  chartTitle,
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                // Ay Seçimi Dropdown
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<int>(
+                      value: _selectedMonth,
+                      isDense: true,
+                      items: List.generate(12, (index) {
+                        return DropdownMenuItem<int>(
+                          value: index + 1,
+                          child: Text(
+                            _monthNames[index],
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        );
+                      }),
+                      onChanged: (int? newMonth) {
+                        if (newMonth != null) {
+                          setState(() {
+                            _selectedMonth = newMonth;
+                            // Yeni ay seçildiğinde analizi yeniden hesapla
+                            if (_scannedProduct != null) {
+                              final salesProvider = Provider.of<SalesProvider>(
+                                  context,
+                                  listen: false);
+                              _productAnalysis = _analyzeProduct(
+                                  _scannedProduct!, salesProvider.sales);
+                            }
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 250,
+              child: SfCartesianChart(
+                primaryXAxis: const CategoryAxis(),
+                primaryYAxis: const NumericAxis(),
+                tooltipBehavior: TooltipBehavior(enable: true),
+                series: <CartesianSeries>[
+                  LineSeries<MapEntry<String, dynamic>, String>(
+                    dataSource: chartData['data'],
+                    xValueMapper: (MapEntry<String, dynamic> data, _) =>
+                        data.key,
+                    yValueMapper: (MapEntry<String, dynamic> data, _) =>
+                        data.value,
+                    name: chartData['label'],
+                    color: chartColor,
+                    markerSettings: const MarkerSettings(isVisible: true),
+                    dataLabelSettings: const DataLabelSettings(isVisible: true),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

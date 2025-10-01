@@ -1609,14 +1609,23 @@ class FirestoreService {
     return null; // This shouldn't be reached
   }
 
-  /// Delete supplier with retry mechanism
+  /// Delete supplier with cascade delete (related data cleanup)
   Future<bool> deleteSupplier(String storeId, String supplierId) async {
     // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
         print(
-            '🔄 Attempt $attempt: Deleting supplier from Firebase: $supplierId in store: $storeId');
+            '🔄 Attempt $attempt: Deleting supplier and related data from Firebase: $supplierId in store: $storeId');
 
+        // ✅ CASCADE DELETE - Delete related data first
+        print('🗑️ Step 1: Deleting all purchases for supplier...');
+        await deleteAllPurchasesForSupplier(storeId, supplierId);
+
+        print('🗑️ Step 2: Deleting all payment transactions for supplier...');
+        await deleteAllPaymentTransactionsForSupplier(storeId, supplierId);
+
+        // ✅ Finally delete the supplier document itself
+        print('🗑️ Step 3: Deleting supplier document...');
         await _firestore
             .collection(_collectionStores)
             .doc(storeId)
@@ -1624,14 +1633,16 @@ class FirestoreService {
             .doc(supplierId)
             .delete();
 
-        print('✅ Supplier deleted successfully from Firebase: $supplierId');
+        print(
+            '✅ Supplier and all related data deleted successfully from Firebase: $supplierId');
         return true; // Success - exit retry loop
       } catch (e) {
-        print('❌ Firebase deleteSupplier error (attempt $attempt): $e');
+        print(
+            '❌ Firebase deleteSupplier (cascade) error (attempt $attempt): $e');
 
         if (attempt == 3) {
           // Son deneme de başarısız
-          print('💀 All retry attempts failed for deleteSupplier');
+          print('💀 All retry attempts failed for deleteSupplier (cascade)');
           return false;
         }
 
@@ -1939,6 +1950,35 @@ class FirestoreService {
     }
 
     return false;
+  }
+
+  /// Delete all purchases for a specific supplier
+  Future<bool> deleteAllPurchasesForSupplier(
+      String storeId, String supplierId) async {
+    try {
+      print('🔄 Deleting all purchases for supplier: $supplierId');
+
+      final querySnapshot = await _firestore
+          .collection(_collectionStores)
+          .doc(storeId)
+          .collection('suppliers')
+          .doc(supplierId)
+          .collection('purchases')
+          .get();
+
+      final batch = _firestore.batch();
+      for (final doc in querySnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      await batch.commit();
+      print(
+          '✅ All purchases deleted for supplier: $supplierId (${querySnapshot.docs.length} purchases)');
+      return true;
+    } catch (e) {
+      print('❌ Error deleting purchases for supplier: $e');
+      return false;
+    }
   }
 
   /// Delete all payment transactions for a specific supplier

@@ -9,7 +9,7 @@ import '../utils/currency_formatter.dart';
 import '../widgets/store_menu_widget.dart';
 import 'price_check_screen.dart';
 import 'notifications_screen.dart';
-import 'qr_product_analysis_screen.dart';
+import '../utils/navigation_helper.dart';
 import 'team_management_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -398,10 +398,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _openProductAnalysis(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const QRProductAnalysisScreen(),
-      ),
+    NavigationHelper.openProductAnalysis(
+      context,
+      source: 'dashboard',
     );
   }
 }

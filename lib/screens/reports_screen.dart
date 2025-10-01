@@ -6,7 +6,7 @@ import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
-import 'qr_product_analysis_screen.dart';
+import '../utils/navigation_helper.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -344,7 +344,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             children: [
               Expanded(
                 child: _buildSummaryCard(
-                  'Yıllık Ciro',
+                  'Aylık Ciro',
                   _currencyFormat.format(totalRevenue),
                   Icons.attach_money,
                   Colors.green,
@@ -353,7 +353,7 @@ class _ReportsScreenState extends State<ReportsScreen>
               const SizedBox(width: 4),
               Expanded(
                 child: _buildSummaryCard(
-                  'Yıllık Kâr',
+                  'Aylık Kâr',
                   _currencyFormat.format(totalProfit),
                   Icons.trending_up,
                   Colors.blue,
@@ -1881,11 +1881,9 @@ class _ReportsScreenState extends State<ReportsScreen>
                   ElevatedButton.icon(
                     onPressed: () async {
                       // QR kod tarama sayfasına yönlendir
-                      Navigator.push(
+                      NavigationHelper.openProductAnalysis(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => const QRProductAnalysisScreen(),
-                        ),
+                        source: 'reports',
                       );
                     },
                     icon: const Icon(Icons.qr_code_scanner),

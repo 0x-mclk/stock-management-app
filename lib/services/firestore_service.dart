@@ -19,7 +19,6 @@ class FirestoreService {
       Map<String, dynamic> productData) async {
     // ✅ StoreId validation
     if (storeId.isEmpty) {
-      print('❌ SAVEPRODUCT FAILED: StoreId is empty!');
       return false;
     }
 
@@ -31,40 +30,31 @@ class FirestoreService {
 
         if (productId == null) {
           // 🆕 Add new product - Firebase generates ID
-          print('🔄 Attempt $attempt: Adding new product to Firebase...');
           final docRef = await _firestore
               .collection(_collectionStores)
               .doc(storeId)
               .collection(_collectionProducts)
               .add(productData);
-
-          print('✅ New product added with Firebase ID: ${docRef.id}');
           return true; // Success - exit retry loop
         } else {
           // 🔄 Update existing product
-          print('🔄 Attempt $attempt: Updating existing product: $productId');
           await _firestore
               .collection(_collectionStores)
               .doc(storeId)
               .collection(_collectionProducts)
               .doc(productId)
               .update(productData);
-
-          print('✅ Product updated successfully: $productId');
           return true; // Success - exit retry loop
         }
       } catch (e) {
-        print('❌ Firebase saveProduct error (attempt $attempt): $e');
 
         if (attempt == 3) {
           // Son deneme de başarısız
-          print('💀 All retry attempts failed for saveProduct');
           return false;
         }
 
         // Exponential backoff - wait before retry
         final waitTime = Duration(milliseconds: 500 * attempt);
-        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
         await Future.delayed(waitTime);
       }
     }
@@ -77,8 +67,6 @@ class FirestoreService {
     // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
-        print(
-            '🔄 Attempt $attempt: Deleting product from Firebase: $productId in store: $storeId');
 
         await _firestore
             .collection(_collectionStores)
@@ -86,21 +74,16 @@ class FirestoreService {
             .collection(_collectionProducts)
             .doc(productId)
             .delete();
-
-        print('✅ Product deleted successfully from Firebase: $productId');
         return true; // Success - exit retry loop
       } catch (e) {
-        print('❌ Firebase deleteProduct error (attempt $attempt): $e');
 
         if (attempt == 3) {
           // Son deneme de başarısız
-          print('💀 All retry attempts failed for deleteProduct');
           return false;
         }
 
         // Exponential backoff - wait before retry
         final waitTime = Duration(milliseconds: 500 * attempt);
-        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
         await Future.delayed(waitTime);
       }
     }
@@ -1552,7 +1535,6 @@ class FirestoreService {
       Map<String, dynamic> supplierData) async {
     // ✅ StoreId validation
     if (storeId.isEmpty) {
-      print('❌ SAVESUPPLIER FAILED: StoreId is empty!');
       return null;
     }
 
@@ -1564,44 +1546,32 @@ class FirestoreService {
 
         if (supplierId == null) {
           // 🆕 Add new supplier - Firebase generates ID
-          print('🔄 Attempt $attempt: Adding new supplier to Firebase...');
-          print('🔍 DEBUG: StoreId: $storeId');
-          print('🔍 DEBUG: Supplier data: $supplierData');
 
           final docRef = await _firestore
               .collection(_collectionStores)
               .doc(storeId)
               .collection('suppliers')
               .add(supplierData);
-
-          print('✅ New supplier added with Firebase ID: ${docRef.id}');
-          print('🔍 DEBUG: Full path: /stores/$storeId/suppliers/${docRef.id}');
           return docRef.id; // Return Firebase document ID
         } else {
           // 🔄 Update existing supplier
-          print('🔄 Attempt $attempt: Updating existing supplier: $supplierId');
           await _firestore
               .collection(_collectionStores)
               .doc(storeId)
               .collection('suppliers')
               .doc(supplierId)
               .update(supplierData);
-
-          print('✅ Supplier updated successfully: $supplierId');
           return supplierId; // Return existing supplier ID
         }
       } catch (e) {
-        print('❌ Firebase saveSupplier error (attempt $attempt): $e');
 
         if (attempt == 3) {
           // Son deneme de başarısız
-          print('� All retry attempts failed for saveSupplier');
           return null;
         }
 
         // Exponential backoff - wait before retry
         final waitTime = Duration(milliseconds: 500 * attempt);
-        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
         await Future.delayed(waitTime);
       }
     }
@@ -1614,41 +1584,28 @@ class FirestoreService {
     // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
-        print(
-            '🔄 Attempt $attempt: Deleting supplier and related data from Firebase: $supplierId in store: $storeId');
 
         // ✅ CASCADE DELETE - Delete related data first
-        print('🗑️ Step 1: Deleting all purchases for supplier...');
         await deleteAllPurchasesForSupplier(storeId, supplierId);
-
-        print('🗑️ Step 2: Deleting all payment transactions for supplier...');
         await deleteAllPaymentTransactionsForSupplier(storeId, supplierId);
 
         // ✅ Finally delete the supplier document itself
-        print('🗑️ Step 3: Deleting supplier document...');
         await _firestore
             .collection(_collectionStores)
             .doc(storeId)
             .collection('suppliers')
             .doc(supplierId)
             .delete();
-
-        print(
-            '✅ Supplier and all related data deleted successfully from Firebase: $supplierId');
         return true; // Success - exit retry loop
       } catch (e) {
-        print(
-            '❌ Firebase deleteSupplier (cascade) error (attempt $attempt): $e');
 
         if (attempt == 3) {
           // Son deneme de başarısız
-          print('💀 All retry attempts failed for deleteSupplier (cascade)');
           return false;
         }
 
         // Exponential backoff - wait before retry
         final waitTime = Duration(milliseconds: 500 * attempt);
-        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
         await Future.delayed(waitTime);
       }
     }
@@ -1658,11 +1615,11 @@ class FirestoreService {
 
   /// Get suppliers stream for a store
   Stream<QuerySnapshot> getSuppliersStream(String storeId) {
+    // isActive filtresi sorguda değil — eksik alanlı (eski web) kayıtlar da gelsin
     return _firestore
         .collection(_collectionStores)
         .doc(storeId)
         .collection('suppliers')
-        .where('isActive', isEqualTo: true)
         .orderBy('name')
         .snapshots();
   }
@@ -1680,7 +1637,6 @@ class FirestoreService {
 
       return doc.exists ? doc : null;
     } catch (e) {
-      print('❌ Firebase getSupplier error: $e');
       return null;
     }
   }
@@ -1691,7 +1647,6 @@ class FirestoreService {
   Future<bool> savePurchase(String storeId, String supplierId,
       String? purchaseId, Map<String, dynamic> purchaseData) async {
     if (storeId.isEmpty || supplierId.isEmpty) {
-      print('❌ SAVEPURCHASE FAILED: StoreId or SupplierId is empty!');
       return false;
     }
 
@@ -1704,7 +1659,6 @@ class FirestoreService {
 
         if (purchaseId == null) {
           // 🆕 Add new purchase
-          print('🔄 Attempt $attempt: Adding new purchase to Firebase...');
           final docRef = await _firestore
               .collection(_collectionStores)
               .doc(storeId)
@@ -1712,12 +1666,9 @@ class FirestoreService {
               .doc(supplierId)
               .collection('purchases')
               .add(purchaseData);
-
-          print('✅ New purchase added with Firebase ID: ${docRef.id}');
           return true;
         } else {
           // 🔄 Update existing purchase
-          print('🔄 Attempt $attempt: Updating existing purchase: $purchaseId');
           await _firestore
               .collection(_collectionStores)
               .doc(storeId)
@@ -1726,14 +1677,10 @@ class FirestoreService {
               .collection('purchases')
               .doc(purchaseId)
               .set(purchaseData, SetOptions(merge: true));
-
-          print('✅ Purchase updated: $purchaseId');
           return true;
         }
       } catch (e) {
-        print('❌ Purchase save attempt $attempt failed: $e');
         if (attempt == 3) {
-          print('❌ All purchase save attempts failed');
           return false;
         }
         // Wait before retry (exponential backoff)
@@ -1755,11 +1702,8 @@ class FirestoreService {
           .collection('purchases')
           .doc(purchaseId)
           .delete();
-
-      print('✅ Purchase deleted: $purchaseId');
       return true;
     } catch (e) {
-      print('❌ Firebase deletePurchase error: $e');
       return false;
     }
   }
@@ -1767,8 +1711,6 @@ class FirestoreService {
   /// Get purchases stream for a supplier
   Stream<QuerySnapshot> getPurchasesStream(String storeId, String supplierId) {
     try {
-      print(
-          '🔄 Getting purchases stream for supplier: $supplierId in store: $storeId');
       return _firestore
           .collection(_collectionStores)
           .doc(storeId)
@@ -1778,7 +1720,6 @@ class FirestoreService {
           .orderBy('purchaseDate', descending: true)
           .snapshots();
     } catch (e) {
-      print('❌ Error creating purchases stream: $e');
       // Fallback: orderBy olmadan dene
       return _firestore
           .collection(_collectionStores)
@@ -1815,8 +1756,6 @@ class FirestoreService {
 
         if (transactionId == null) {
           // 🆕 Add new payment transaction - Firebase generates ID
-          print(
-              '🔄 Attempt $attempt: Adding new payment transaction to Firebase...');
           final docRef = await _firestore
               .collection(_collectionStores)
               .doc(storeId)
@@ -1824,14 +1763,9 @@ class FirestoreService {
               .doc(supplierId)
               .collection('supplier_transactions')
               .add(paymentData);
-
-          print(
-              '✅ New payment transaction added with Firebase ID: ${docRef.id}');
           return true; // Success - exit retry loop
         } else {
           // 🔄 Update existing payment transaction
-          print(
-              '🔄 Attempt $attempt: Updating existing payment transaction: $transactionId');
           await _firestore
               .collection(_collectionStores)
               .doc(storeId)
@@ -1840,22 +1774,17 @@ class FirestoreService {
               .collection('supplier_transactions')
               .doc(transactionId)
               .set(paymentData, SetOptions(merge: true));
-
-          print('✅ Payment transaction updated successfully: $transactionId');
           return true; // Success - exit retry loop
         }
       } catch (e) {
-        print('❌ Firebase savePaymentHistory error (attempt $attempt): $e');
 
         if (attempt == 3) {
           // Son deneme de başarısız
-          print('💀 All retry attempts failed for savePaymentHistory');
           return false;
         }
 
         // Exponential backoff - wait before retry
         final waitTime = Duration(milliseconds: 500 * attempt);
-        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
         await Future.delayed(waitTime);
       }
     }
@@ -1867,8 +1796,6 @@ class FirestoreService {
   Future<QuerySnapshot?> getPaymentHistory(
       String storeId, String supplierId) async {
     try {
-      print(
-          '🔄 Getting payment history from Firebase for supplier: $supplierId');
 
       final querySnapshot = await _firestore
           .collection(_collectionStores)
@@ -1878,12 +1805,8 @@ class FirestoreService {
           .collection('supplier_transactions')
           .orderBy('created_at', descending: true)
           .get();
-
-      print(
-          '✅ Payment history retrieved: ${querySnapshot.docs.length} transactions');
       return querySnapshot;
     } catch (e) {
-      print('❌ Error getting payment history from Firebase: $e');
       return null;
     }
   }
@@ -1917,8 +1840,6 @@ class FirestoreService {
     // 🔄 RETRY MECHANISM - 3 attempts with exponential backoff
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
-        print(
-            '🔄 Attempt $attempt: Deleting payment transaction from Firebase: $transactionId');
 
         await _firestore
             .collection(_collectionStores)
@@ -1928,23 +1849,16 @@ class FirestoreService {
             .collection('supplier_transactions')
             .doc(transactionId)
             .delete();
-
-        print(
-            '✅ Payment transaction deleted successfully from Firebase: $transactionId');
         return true; // Success - exit retry loop
       } catch (e) {
-        print(
-            '❌ Firebase deletePaymentTransaction error (attempt $attempt): $e');
 
         if (attempt == 3) {
           // Son deneme de başarısız
-          print('💀 All retry attempts failed for deletePaymentTransaction');
           return false;
         }
 
         // Exponential backoff - wait before retry
         final waitTime = Duration(milliseconds: 500 * attempt);
-        print('⏳ Waiting ${waitTime.inMilliseconds}ms before retry...');
         await Future.delayed(waitTime);
       }
     }
@@ -1956,7 +1870,6 @@ class FirestoreService {
   Future<bool> deleteAllPurchasesForSupplier(
       String storeId, String supplierId) async {
     try {
-      print('🔄 Deleting all purchases for supplier: $supplierId');
 
       final querySnapshot = await _firestore
           .collection(_collectionStores)
@@ -1972,11 +1885,8 @@ class FirestoreService {
       }
 
       await batch.commit();
-      print(
-          '✅ All purchases deleted for supplier: $supplierId (${querySnapshot.docs.length} purchases)');
       return true;
     } catch (e) {
-      print('❌ Error deleting purchases for supplier: $e');
       return false;
     }
   }
@@ -1985,7 +1895,6 @@ class FirestoreService {
   Future<bool> deleteAllPaymentTransactionsForSupplier(
       String storeId, String supplierId) async {
     try {
-      print('🔄 Deleting all payment transactions for supplier: $supplierId');
 
       final querySnapshot = await _firestore
           .collection(_collectionStores)
@@ -2001,11 +1910,8 @@ class FirestoreService {
       }
 
       await batch.commit();
-      print(
-          '✅ All payment transactions deleted for supplier: $supplierId (${querySnapshot.docs.length} transactions)');
       return true;
     } catch (e) {
-      print('❌ Error deleting payment transactions for supplier: $e');
       return false;
     }
   }

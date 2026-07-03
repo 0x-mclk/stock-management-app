@@ -1,26 +1,21 @@
 import 'package:flutter/material.dart';
 import '../models/product.dart';
 import '../screens/qr_product_analysis_screen.dart';
+import 'web_utils.dart';
 
 /// Merkezi navigation yönetimi için utility sınıfı
 class NavigationHelper {
-  /// Ürün analizi sayfasını açar
-  ///
-  /// [context] - BuildContext
-  /// [product] - Önceden seçilmiş ürün (opsiyonel)
-  /// [source] - Hangi sayfadan geldiği bilgisi (analytics için)
+  /// Ürün analizi sayfasını açar.
+  /// Masaüstünde sağdan kayan panel, mobilde tam ekran route.
   static Future<void> openProductAnalysis(
     BuildContext context, {
     Product? product,
     String? source,
   }) {
-    return Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => QRProductAnalysisScreen(
-          preSelectedProduct: product,
-        ),
-      ),
+    return showWebPanel(
+      context: context,
+      child: QRProductAnalysisScreen(preSelectedProduct: product),
+      panelWidth: 900,
     );
   }
 

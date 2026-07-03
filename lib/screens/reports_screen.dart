@@ -7,6 +7,7 @@ import '../providers/sales_provider.dart';
 import '../models/sale.dart';
 import '../models/product.dart';
 import '../utils/navigation_helper.dart';
+import '../utils/web_utils.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -33,6 +34,13 @@ class _ReportsScreenState extends State<ReportsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final salesProvider =
+          Provider.of<SalesProvider>(context, listen: false);
+      if (salesProvider.sales.isEmpty) {
+        salesProvider.loadSales();
+      }
+    });
   }
 
   @override
@@ -43,45 +51,105 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = WebBreakpoints.isDesktop(context);
+
+    // Tab bar — mobilde mavi renkli AppBar içinde, masaüstünde nötr
+    final tabs = [
+      const Tab(icon: Icon(Icons.trending_up), text: 'Satış & Kâr'),
+      const Tab(icon: Icon(Icons.analytics), text: 'Ürün Analizi'),
+      const Tab(icon: Icon(Icons.inventory), text: 'Stok Analizi'),
+      const Tab(icon: Icon(Icons.list_alt), text: 'Satış Listesi'),
+    ];
+
+    final tabBar = TabBar(
+      controller: _tabController,
+      isScrollable: isDesktop, // masaüstünde scroll yapılabilir tab
+      tabAlignment: isDesktop ? TabAlignment.start : TabAlignment.fill,
+      labelColor: isDesktop ? Theme.of(context).primaryColor : Colors.white,
+      unselectedLabelColor: isDesktop ? Colors.grey : Colors.blue[200],
+      indicatorColor:
+          isDesktop ? Theme.of(context).primaryColor : Colors.white,
+      tabs: tabs,
+    );
+
+    final tabView = TabBarView(
+      controller: _tabController,
+      children: [
+        _buildSalesAndProfitTab(),
+        _buildProductAnalysisTab(),
+        _buildStockAnalysisTab(),
+        _buildSalesListTab(),
+      ],
+    );
+
+    if (isDesktop) {
+      // Masaüstü: AppBar yok, sayfa başlığı + tab bar içerik alanında
+      return Scaffold(
+        body: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(32, 28, 32, 0),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Raporlar',
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Satış, stok ve ürün analizleri',
+                              style: TextStyle(
+                                  fontSize: 13, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: tabBar,
+                ),
+                Divider(height: 1, color: Colors.grey.shade200),
+                Expanded(child: tabView),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Mobil: orijinal mavi AppBar
     return Scaffold(
       appBar: AppBar(
         title: const Text('Raporlar'),
         backgroundColor: Colors.blue[600],
         foregroundColor: Colors.white,
         elevation: 2,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.blue[200],
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.trending_up),
-              text: 'Satış & Kâr',
-            ),
-            Tab(
-              icon: Icon(Icons.analytics),
-              text: 'Ürün Analizi',
-            ),
-            Tab(
-              icon: Icon(Icons.inventory),
-              text: 'Stok Analizi',
-            ),
-            Tab(
-              icon: Icon(Icons.list_alt),
-              text: 'Satış Listesi',
-            ),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: tabBar,
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildSalesAndProfitTab(),
-          _buildProductAnalysisTab(),
-          _buildStockAnalysisTab(),
-          _buildSalesListTab(),
-        ],
+      body: Builder(
+        builder: (context) {
+          return tabView;
+        },
       ),
     );
   }
@@ -2126,7 +2194,9 @@ class _ReportsScreenState extends State<ReportsScreen>
 
             // Satış Listesi
             Expanded(
-              child: ListView.builder(
+              child: WebBreakpoints.isDesktop(context)
+                  ? _buildSalesDataTable(sortedSales)
+                  : ListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: sortedSales.length,
                 itemBuilder: (context, index) {
@@ -2246,6 +2316,74 @@ class _ReportsScreenState extends State<ReportsScreen>
           ],
         );
       },
+    );
+  }
+
+  Widget _buildSalesDataTable(List<Sale> sales) {
+    return Card(
+      margin: const EdgeInsets.all(16),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor:
+                  WidgetStateProperty.all(Colors.grey.shade50),
+              headingTextStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: Colors.black87,
+              ),
+              dataTextStyle: const TextStyle(fontSize: 13),
+              columnSpacing: 24,
+              horizontalMargin: 20,
+              columns: const [
+                DataColumn(label: Text('Tarih')),
+                DataColumn(label: Text('Ürünler')),
+                DataColumn(label: Text('Adet'), numeric: true),
+                DataColumn(label: Text('Ödeme')),
+                DataColumn(label: Text('İndirim'), numeric: true),
+                DataColumn(label: Text('Tutar'), numeric: true),
+              ],
+              rows: sales.map((sale) {
+                final itemCount = sale.items.length;
+                final totalQty = sale.items
+                    .fold<int>(0, (s, i) => s + i.quantity);
+                final productNames = itemCount == 1
+                    ? (sale.items.first.productName)
+                    : '${sale.items.first.productName} +${itemCount - 1} daha';
+                return DataRow(cells: [
+                  DataCell(Text(
+                    DateFormat('dd.MM.yyyy HH:mm')
+                        .format(sale.createdAt),
+                    style: const TextStyle(fontSize: 12),
+                  )),
+                  DataCell(Text(productNames,
+                      overflow: TextOverflow.ellipsis)),
+                  DataCell(Text('$totalQty')),
+                  DataCell(
+                      Text(_getPaymentMethodText(sale.paymentMethod))),
+                  DataCell(Text(sale.discount > 0
+                      ? '%${sale.discount.toStringAsFixed(1)}'
+                      : '—')),
+                  DataCell(Text(
+                    _currencyFormat.format(sale.finalAmount),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green),
+                  )),
+                ]);
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
     );
   }
 

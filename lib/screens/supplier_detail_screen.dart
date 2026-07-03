@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/supplier_provider.dart';
 import '../providers/purchase_provider.dart';
@@ -1601,7 +1601,6 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
         throw Exception('Purchase kaydedilemedi');
       }
 
-      print('✅ Purchase created successfully: $purchaseId');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1609,7 +1608,6 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen>
           backgroundColor: Colors.red,
         ),
       );
-      print('❌ Error saving purchase: $e');
       return;
     }
 

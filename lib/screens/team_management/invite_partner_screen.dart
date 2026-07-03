@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/invitation_model.dart';
 import '../../services/invitation_service.dart';
+import '../../utils/role_display.dart';
 
 class InvitePartnerScreen extends StatefulWidget {
   final String storeId;
@@ -80,7 +81,7 @@ class _InvitePartnerScreenState extends State<InvitePartnerScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          'Partner Davet Et',
+          'Takım Üyesi Davet Et',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.white,
@@ -225,28 +226,18 @@ class _InvitePartnerScreenState extends State<InvitePartnerScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        ...UserRole.values
-                            .where((role) => role != UserRole.owner)
-                            .map(
-                              (role) => RadioListTile<UserRole>(
-                                title: Text(InvitationModel(
-                                  userId: '',
-                                  email: '',
-                                  storeId: '',
-                                  role: role,
-                                  permissions: [],
-                                  status: InvitationStatus.pending,
-                                  invitedAt: DateTime.now(),
-                                ).roleDisplayName),
-                                subtitle: Text(_getRoleDescription(role)),
-                                value: role,
-                                groupValue: _selectedRole,
-                                onChanged: (value) {
-                                  setState(() => _selectedRole = value!);
-                                },
-                                activeColor: Color(0xFF1E88E5),
-                              ),
-                            ),
+                        ...RoleDisplay.invitableRoles.map(
+                          (role) => RadioListTile<UserRole>(
+                            title: Text(RoleDisplay.label(role)),
+                            subtitle: Text(RoleDisplay.inviteDescription(role)),
+                            value: role,
+                            groupValue: _selectedRole,
+                            onChanged: (value) {
+                              setState(() => _selectedRole = value!);
+                            },
+                            activeColor: const Color(0xFF1E88E5),
+                          ),
+                        ),
                       ],
                     ),
                   ).animate().fadeIn(delay: 600.ms).slideX(begin: 0.2),
@@ -308,16 +299,4 @@ class _InvitePartnerScreenState extends State<InvitePartnerScreen> {
     );
   }
 
-  String _getRoleDescription(UserRole role) {
-    switch (role) {
-      case UserRole.manager:
-        return 'Tam yetki, personel davet edebilir';
-      case UserRole.staff:
-        return 'Temel işlemler, satış ve stok yönetimi';
-      case UserRole.partner:
-        return 'Sınırlı yetki, sadece görüntüleme ve satış';
-      case UserRole.owner:
-        return 'Mağaza sahibi';
-    }
-  }
 }

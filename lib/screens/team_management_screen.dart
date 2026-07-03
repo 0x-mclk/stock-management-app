@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/multi_user_indicators_widget.dart';
 import '../services/invitation_service.dart';
 import '../services/store_selection_service.dart';
 import '../models/invitation_model.dart';
+import '../utils/role_display.dart';
 import 'admin_approval_screen.dart';
 
 class TeamManagementScreen extends StatefulWidget {
@@ -16,7 +16,7 @@ class TeamManagementScreen extends StatefulWidget {
 
 class _TeamManagementScreenState extends State<TeamManagementScreen> {
   final TextEditingController _emailController = TextEditingController();
-  UserRole _selectedRole = UserRole.staff;
+  UserRole _selectedRole = UserRole.staff; // Davet: manager veya staff
   bool _isLoading = false;
   String? _currentStoreId;
   String? _currentUserId;
@@ -29,21 +29,17 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
 
   Future<void> _initializeUserData() async {
     final currentUser = FirebaseAuth.instance.currentUser;
-    print('🔍 Initializing user data...');
     if (currentUser != null) {
       // Aynı store service kullanarak Store ID alın
       final storeSelectionService = StoreSelectionService.instance;
       final storeId = await storeSelectionService.getCurrentStoreId();
 
-      print('🏦 Firebase User ID: ${currentUser.uid}');
-      print('🏦 Store ID from StoreSelectionService: $storeId');
 
       setState(() {
         _currentUserId = currentUser.uid;
         _currentStoreId = storeId; // Service'den gelen Store ID kullan
       });
     } else {
-      print('❌ No current user found');
     }
   }
 
@@ -277,27 +273,30 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
 
                     Wrap(
                       spacing: 8,
-                      children: UserRole.values.map((role) {
+                      children: RoleDisplay.invitableRoles.map((role) {
                         return ChoiceChip(
-                          label: Text(_getRoleDisplayName(role)),
+                          label: Text(RoleDisplay.label(role)),
                           selected: _selectedRole == role,
                           onSelected: (selected) {
                             if (selected) {
-                              setState(() {
-                                _selectedRole = role;
-                              });
+                              setState(() => _selectedRole = role);
                             }
                           },
                           selectedColor:
-                              _getRoleColor(role).withValues(alpha: 0.3),
+                              RoleDisplay.color(role).withValues(alpha: 0.3),
                           backgroundColor: Colors.grey[200],
                           avatar: Icon(
-                            _getRoleIcon(role),
+                            RoleDisplay.icon(role),
                             size: 16,
-                            color: _getRoleColor(role),
+                            color: RoleDisplay.color(role),
                           ),
                         );
                       }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      RoleDisplay.inviteDescription(_selectedRole),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     ),
 
                     const SizedBox(height: 16),
@@ -363,25 +362,17 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _buildRoleDescription(
-                      UserRole.owner,
-                      'Tam yetkili',
-                      'Tüm işlemleri yapabilir, üye yönetimi, ayarlar',
+                    _buildTierDescription(
+                      title: 'Yönetici',
+                      description: RoleDisplay.tierDescriptionYonetici(),
+                      color: RoleDisplay.color(UserRole.manager),
+                      icon: RoleDisplay.icon(UserRole.manager),
                     ),
-                    _buildRoleDescription(
-                      UserRole.manager,
-                      'Yönetici',
-                      'Stok yönetimi, satış, raporlar, sınırlı üye yönetimi',
-                    ),
-                    _buildRoleDescription(
-                      UserRole.staff,
-                      'Çalışan',
-                      'Temel stok işlemleri, satış yapma, ürün görüntüleme',
-                    ),
-                    _buildRoleDescription(
-                      UserRole.partner,
-                      'Ortak',
-                      'Finansal raporlar, ortak kararlar, sınırlı yönetim',
+                    _buildTierDescription(
+                      title: 'Çalışan',
+                      description: RoleDisplay.tierDescriptionCalisan(),
+                      color: RoleDisplay.color(UserRole.staff),
+                      icon: RoleDisplay.icon(UserRole.staff),
                     ),
                   ],
                 ),
@@ -393,8 +384,12 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
     );
   }
 
-  Widget _buildRoleDescription(
-      UserRole role, String title, String description) {
+  Widget _buildTierDescription({
+    required String title,
+    required String description,
+    required Color color,
+    required IconData icon,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: Row(
@@ -403,14 +398,10 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: _getRoleColor(role).withValues(alpha: 0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              _getRoleIcon(role),
-              color: _getRoleColor(role),
-              size: 20,
-            ),
+            child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -422,7 +413,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: _getRoleColor(role),
+                    color: color,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -439,44 +430,5 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
         ],
       ),
     );
-  }
-
-  String _getRoleDisplayName(UserRole role) {
-    switch (role) {
-      case UserRole.owner:
-        return 'Sahip';
-      case UserRole.manager:
-        return 'Yönetici';
-      case UserRole.staff:
-        return 'Çalışan';
-      case UserRole.partner:
-        return 'Ortak';
-    }
-  }
-
-  Color _getRoleColor(UserRole role) {
-    switch (role) {
-      case UserRole.owner:
-        return Colors.purple;
-      case UserRole.manager:
-        return Colors.blue;
-      case UserRole.staff:
-        return Colors.green;
-      case UserRole.partner:
-        return Colors.orange;
-    }
-  }
-
-  IconData _getRoleIcon(UserRole role) {
-    switch (role) {
-      case UserRole.owner:
-        return Icons.star;
-      case UserRole.manager:
-        return Icons.manage_accounts;
-      case UserRole.staff:
-        return Icons.person;
-      case UserRole.partner:
-        return Icons.handshake;
-    }
   }
 }

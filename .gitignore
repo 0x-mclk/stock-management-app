@@ -139,6 +139,9 @@ Thumbs.db
 # Flutter version management
 .fvm/
 
+# Gemini API anahtarı (yerel)
+lib/config/gemini_config.dart
+
 # Additional Flutter/Dart
 *.lock
 .flutter-plugins-dependencies

@@ -8,12 +8,14 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'providers/app_provider.dart';
+import 'providers/role_access_provider.dart';
 //import 'providers/product_provider.dart';
 import 'providers/realtime_product_provider.dart';
 import 'providers/sales_provider.dart';
 import 'providers/supplier_provider.dart';
 import 'providers/purchase_provider.dart';
 import 'providers/notification_provider.dart';
+import 'providers/report_chat_session_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
@@ -85,6 +87,8 @@ class StockManagementApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AppProvider()),
+        ChangeNotifierProvider(create: (_) => RoleAccessProvider()),
+        ChangeNotifierProvider(create: (_) => ReportChatSessionProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => RealtimeProductProvider()),
         ChangeNotifierProvider(create: (_) => SalesProvider()),
@@ -141,6 +145,11 @@ class StockManagementApp extends StatelessWidget {
                 selectedItemColor: const Color(0xFF2196F3),
                 unselectedItemColor: Colors.grey,
                 type: BottomNavigationBarType.fixed,
+              ),
+              dialogTheme: const DialogThemeData(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(16)),
+                ),
               ),
             ),
             home: const SplashScreen(),

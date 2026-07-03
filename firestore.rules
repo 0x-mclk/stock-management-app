@@ -112,6 +112,20 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
+
+    // AI rapor asistanı — global istek günlüğü (Paket B)
+    match /ai_chat_requests/{requestId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // AI model ayarları (disabled_models vb.) — okuma herkese, yazma yönetici
+    match /ai_config/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
     
     // Helper functions
     function isStoreOwnerSafe(storeId) {

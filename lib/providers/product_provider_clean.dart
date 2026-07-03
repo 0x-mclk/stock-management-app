@@ -26,7 +26,6 @@ class ProductProvider extends ChangeNotifier {
 
   // Constructor
   ProductProvider() {
-    print('🏗️ ProductProvider constructor called');
   }
 
   // Getters
@@ -51,7 +50,6 @@ class ProductProvider extends ChangeNotifier {
   Future<void> _initializeStoreId() async {
     final storeId = await StoreSelectionService.instance.getCurrentStoreId();
     _currentStoreId = storeId;
-    print('🆔 Store ID initialized: $_currentStoreId');
   }
 
   // Load products from local database
@@ -66,20 +64,16 @@ class ProductProvider extends ChangeNotifier {
 
   // Main load products method
   Future<void> loadProducts() async {
-    print('🚀 LOAD PRODUCTS CALLED! Starting entire process...');
     setLoading(true);
     try {
       // Initialize store ID first
       await _initializeStoreId();
-      print('🆔 Store ID initialized: $_currentStoreId');
 
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
-        print('❌ EMPTY STORE ID - User not logged in');
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      print('✅ Store ID is valid: $storeId, starting product loading...');
 
       // First load from local database
       _products = await _dataService.loadProductsByStore(storeId, limit: null);
@@ -88,14 +82,12 @@ class ProductProvider extends ChangeNotifier {
       notifyListeners(); // Show local data first
 
       // Then sync with Firebase
-      print('🔄 Starting Firebase sync for products...');
       await _syncService.syncFromFirebase();
 
       // Reload after Firebase sync
       _products = await _dataService.loadProductsByStore(storeId, limit: null);
       _filterProducts();
 
-      print('🔍 LOADED PRODUCTS COUNT: ${_products.length}');
 
       // Start Firebase real-time updates
       _startFirebaseRealTimeStream(storeId);
@@ -104,9 +96,7 @@ class ProductProvider extends ChangeNotifier {
       _notificationProvider?.checkLowStockProducts(_products);
 
       notifyListeners();
-      print('🔔 notifyListeners() called after Firebase sync');
     } catch (e) {
-      print('❌ Error loading products: $e');
     } finally {
       setLoading(false);
     }
@@ -115,11 +105,9 @@ class ProductProvider extends ChangeNotifier {
   // 🔥 Firebase Real-Time Stream
   void _startFirebaseRealTimeStream(String storeId) {
     if (_firebaseListenerStarted) {
-      print('🔥 Firebase listener already started, skipping...');
       return;
     }
 
-    print('🔥 Starting Firebase Real-Time Stream for store: $storeId');
 
     // Cancel previous subscription
     _firebaseSubscription?.cancel();
@@ -128,22 +116,18 @@ class ProductProvider extends ChangeNotifier {
     _firebaseSubscription =
         _firestoreService.getStoreProductsStream(storeId).listen(
       (snapshot) {
-        print('🔥 Real-time update received: ${snapshot.docs.length} products');
         _handleFirebaseStreamUpdate(snapshot);
       },
       onError: (error) {
-        print('❌ Firebase stream error: $error');
       },
     );
 
     _firebaseListenerStarted = true;
-    print('🔥 Firebase listener started successfully');
   }
 
   // Handle Firebase stream updates
   void _handleFirebaseStreamUpdate(dynamic snapshot) async {
     try {
-      print('🔄 Processing Firebase stream update...');
 
       // Convert Firebase data to Product models
       final firebaseProducts = snapshot.docs.map<Product>((doc) {
@@ -158,11 +142,7 @@ class ProductProvider extends ChangeNotifier {
 
       // Reload products from database
       await _loadProductsFromDatabase();
-
-      print(
-          '✅ Real-time update completed: ${firebaseProducts.length} products');
     } catch (e) {
-      print('❌ Error processing Firebase stream update: $e');
     }
   }
 
@@ -190,12 +170,10 @@ class ProductProvider extends ChangeNotifier {
       await _dataService.saveProduct(productWithStore);
 
       // Sync to Firebase
-      print('🔄 Syncing new product to Firebase...');
       await _syncService.syncToFirebase();
 
       await refreshProducts();
     } catch (e) {
-      print('❌ Error adding product: $e');
       rethrow;
     }
   }
@@ -343,7 +321,6 @@ class ProductProvider extends ChangeNotifier {
   void dispose() {
     _firebaseSubscription?.cancel();
     _firebaseListenerStarted = false;
-    print('🧹 ProductProvider disposed - Firebase listener cancelled');
     super.dispose();
   }
 }

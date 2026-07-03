@@ -268,12 +268,9 @@ class DatabaseService {
       await db.delete('sales');
       await db.delete('suppliers');
       await db.delete('products');
-
-      print('🔄 SQLite tabloları Firebase uyumlu ID formatına geçirildi');
     }
     if (oldVersion < 11) {
       // ✅ Complete migration to STRING ID format for all tables
-      print('🔄 Migrating to STRING ID format for all tables...');
 
       // Drop and recreate tables to ensure proper STRING ID format
       await db.execute('DROP TABLE IF EXISTS suppliers');
@@ -330,13 +327,10 @@ class DatabaseService {
       // Recreate indexes
       await db.execute(
           'CREATE INDEX idx_suppliers_store_id ON suppliers(store_id)');
-
-      print('✅ All tables successfully migrated to STRING ID format');
     }
 
     if (oldVersion < 12) {
       // ✅ Add missing columns to suppliers table
-      print('🔄 Adding missing columns to suppliers table...');
 
       try {
         // Add is_active column
@@ -356,30 +350,23 @@ class DatabaseService {
         await db.execute('''
           ALTER TABLE suppliers ADD COLUMN last_sync_attempt TEXT
         ''');
-
-        print('✅ Missing columns added to suppliers table');
       } catch (e) {
-        print('⚠️ Some columns may already exist: $e');
       }
     }
 
     if (oldVersion < 13) {
       // ✅ Ensure is_active column exists
-      print('🔄 Ensuring is_active column exists in suppliers table...');
 
       try {
         await db.execute('''
           ALTER TABLE suppliers ADD COLUMN is_active INTEGER DEFAULT 1
         ''');
-        print('✅ is_active column added to suppliers table');
       } catch (e) {
-        print('⚠️ is_active column may already exist: $e');
       }
     }
 
     if (oldVersion < 14) {
       // ✅ Add purchases table - Tedarikçi alımları için ayrı tablo
-      print('🔄 Creating purchases table...');
 
       try {
         await db.execute('''
@@ -400,9 +387,7 @@ class DatabaseService {
             FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
           )
         ''');
-        print('✅ purchases table created successfully');
       } catch (e) {
-        print('❌ Error creating purchases table: $e');
       }
     }
   }
@@ -518,14 +503,12 @@ class DatabaseService {
     try {
       // Save to SQLite first (offline-first approach)
       await db.insert('suppliers', supplierData);
-      print('✅ New supplier saved to SQLite: $supplierId');
 
       // Attempt Firebase sync (non-blocking) - mark as new supplier
       _syncSupplierToFirebase(supplierData, isNewSupplier: true);
 
       return supplierId;
     } catch (e) {
-      print('❌ Error creating supplier: $e');
       rethrow;
     }
   }
@@ -549,27 +532,22 @@ class DatabaseService {
       );
 
       if (rowsAffected > 0) {
-        print('✅ Supplier updated in SQLite: ${supplier.id}');
         // Attempt Firebase sync (non-blocking)
         _syncSupplierToFirebase(supplierData);
       } else {
         // Supplier not found in SQLite, try to insert it
-        print('⚠️ Supplier not found in SQLite, creating: ${supplier.id}');
 
         try {
           await db.insert('suppliers', supplierData);
-          print('✅ Supplier created in SQLite: ${supplier.id}');
 
           // Sync to Firebase
           _syncSupplierToFirebase(supplierData);
         } catch (insertError) {
-          print('❌ Error creating supplier: $insertError');
           throw Exception(
               'Supplier not found and could not be created: ${supplier.id}');
         }
       }
     } catch (e) {
-      print('❌ Error updating supplier: $e');
       rethrow;
     }
   }
@@ -587,7 +565,6 @@ class DatabaseService {
       );
 
       if (rowsAffected > 0) {
-        print('✅ Supplier deleted from SQLite: $supplierId');
 
         // Attempt Firebase sync (non-blocking)
         _deleteSupplierFromFirebase(supplierId, storeId);
@@ -595,7 +572,6 @@ class DatabaseService {
         throw Exception('Supplier not found: $supplierId');
       }
     } catch (e) {
-      print('❌ Error deleting supplier: $e');
       rethrow;
     }
   }
@@ -614,7 +590,6 @@ class DatabaseService {
 
       return maps.map((map) => Supplier.fromMap(map)).toList();
     } catch (e) {
-      print('❌ Error getting suppliers: $e');
       return [];
     }
   }
@@ -636,7 +611,6 @@ class DatabaseService {
       }
       return null;
     } catch (e) {
-      print('❌ Error getting supplier: $e');
       return null;
     }
   }
@@ -658,7 +632,6 @@ class DatabaseService {
       }
       return null;
     } catch (e) {
-      print('❌ Error getting supplier data: $e');
       return null;
     }
   }
@@ -675,8 +648,6 @@ class DatabaseService {
       final supplierId = supplierData['id'] as String?;
 
       if (storeId == null || supplierId == null) {
-        print(
-            '❌ Cannot sync supplier to Firebase: missing storeId or supplierId');
         return;
       }
 
@@ -696,25 +667,18 @@ class DatabaseService {
       );
 
       if (firebaseDocId != null) {
-        print(
-            '✅ Supplier synced to Firebase: $supplierId -> Firebase ID: $firebaseDocId');
 
         // If this was a new supplier and we got a different Firebase ID, update SQLite
         if (isNewSupplier && firebaseDocId != supplierId) {
-          print(
-              '🔄 Updating SQLite with Firebase ID: $supplierId -> $firebaseDocId');
           await _updateSupplierIdInSQLite(supplierId, firebaseDocId);
         }
 
         // Clear pending sync flag
         await _clearSupplierPendingSync(firebaseDocId);
       } else {
-        print(
-            '⚠️ Failed to sync supplier to Firebase: $supplierId - will retry later');
         // Keep pending sync flag for retry
       }
     } catch (e) {
-      print('❌ Firebase sync error for supplier: $e - will retry later');
       // Keep pending sync flag for retry
     }
   }
@@ -729,15 +693,11 @@ class DatabaseService {
           await FirestoreService.instance.deleteSupplier(storeId, supplierId);
 
       if (success) {
-        print('✅ Supplier deleted from Firebase: $supplierId');
         // Clear pending sync flag
         await _clearSupplierPendingSync(supplierId);
       } else {
-        print(
-            '⚠️ Failed to delete supplier from Firebase: $supplierId - will retry later');
       }
     } catch (e) {
-      print('❌ Firebase delete error for supplier: $e - will retry later');
     }
   }
 
@@ -762,7 +722,6 @@ class DatabaseService {
         whereArgs: [supplierId],
       );
     } catch (e) {
-      print('❌ Error marking supplier pending sync: $e');
     }
   }
 
@@ -782,7 +741,6 @@ class DatabaseService {
         whereArgs: [supplierId],
       );
     } catch (e) {
-      print('❌ Error clearing supplier pending sync: $e');
     }
   }
 
@@ -803,7 +761,6 @@ class DatabaseService {
 
     try {
       await db.insert('purchases', purchaseData);
-      print('✅ Purchase created in SQLite: $purchaseId');
 
       // Only sync to Firebase if not coming from Firebase
       if (!fromFirebase) {
@@ -816,19 +773,13 @@ class DatabaseService {
           await _updateSupplierTotalsAfterPurchase(
               purchaseData['supplier_id'], purchaseData['amount'].toDouble(),
               add: true);
-          print(
-              '✅ Supplier totals update completed for: ${purchaseData['supplier_id']}');
         } catch (e) {
-          print('❌ Error calling supplier totals update: $e');
         }
       } else {
-        print(
-            '🔄 Skipping supplier totals update - data from Firebase: ${purchaseData['supplier_id']}');
       }
 
       return purchaseId;
     } catch (e) {
-      print('❌ Error creating purchase: $e');
       return null;
     }
   }
@@ -854,7 +805,6 @@ class DatabaseService {
       );
 
       if (rowsAffected > 0) {
-        print('✅ Purchase updated: ${purchaseData['id']}');
         // Only sync to Firebase if not coming from Firebase
         if (!fromFirebase) {
           _syncPurchaseToFirebase(purchaseData, fromFirebase: fromFirebase);
@@ -863,7 +813,6 @@ class DatabaseService {
         throw Exception('Purchase not found: ${purchaseData['id']}');
       }
     } catch (e) {
-      print(' updating purchase: $e');
       rethrow;
     }
   }
@@ -891,7 +840,6 @@ class DatabaseService {
         );
 
         if (rowsAffected > 0) {
-          print('✅ Purchase deleted from SQLite: $purchaseId');
 
           // Update supplier totals (subtract the amount)
           _updateSupplierTotalsAfterPurchase(
@@ -907,7 +855,6 @@ class DatabaseService {
         }
       }
     } catch (e) {
-      print('❌ Error deleting purchase: $e');
       rethrow;
     }
   }
@@ -944,9 +891,7 @@ class DatabaseService {
         where: 'supplier_id = ?',
         whereArgs: [supplierId],
       );
-      print('✅ Deleted all purchases for supplier: $supplierId');
     } catch (e) {
-      print('❌ Error deleting purchases for supplier: $e');
       rethrow;
     }
   }
@@ -956,8 +901,6 @@ class DatabaseService {
       {bool fromFirebase = false}) async {
     // Prevent sync loops - don't sync back to Firebase if data came from Firebase
     if (fromFirebase) {
-      print(
-          '🔄 Skipping Firebase sync - data originated from Firebase: ${purchaseData['id']}');
       return;
     }
 
@@ -976,14 +919,11 @@ class DatabaseService {
       );
 
       if (success) {
-        print('✅ Purchase synced to Firebase: ${purchaseData['id']}');
       } else {
-        print('❌ Failed to sync purchase to Firebase: ${purchaseData['id']}');
         // Mark for pending sync
         _markPurchaseForPendingSync(purchaseData['id'], 'create');
       }
     } catch (e) {
-      print('❌ Error syncing purchase to Firebase: $e');
       _markPurchaseForPendingSync(purchaseData['id'], 'create');
     }
   }
@@ -997,12 +937,9 @@ class DatabaseService {
           storeId, supplierId, purchaseId);
 
       if (success) {
-        print('✅ Purchase deleted from Firebase: $purchaseId');
       } else {
-        print('❌ Failed to delete purchase from Firebase: $purchaseId');
       }
     } catch (e) {
-      print('❌ Error deleting purchase from Firebase: $e');
     }
   }
 
@@ -1010,8 +947,6 @@ class DatabaseService {
   Future<void> _updateSupplierTotalsAfterPurchase(
       String supplierId, double amount,
       {required bool add}) async {
-    print(
-        '🔄 Starting supplier totals update for: $supplierId, amount: $amount, add: $add');
     try {
       final db = await database;
       final suppliers = await db.query(
@@ -1022,8 +957,6 @@ class DatabaseService {
 
       if (suppliers.isNotEmpty) {
         final supplier = suppliers.first;
-        print(
-            '✅ Supplier found in SQLite: ${supplier['id']} - ${supplier['name']}');
         // ✅ Tüm totals hesapla
         final currentTotal = (supplier['total_purchases'] ?? 0.0) is num
             ? (supplier['total_purchases'] as num).toDouble()
@@ -1059,28 +992,19 @@ class DatabaseService {
         updatedSupplierData['yearly_purchases'] = newYearly;
         updatedSupplierData['updated_at'] = DateTime.now().toIso8601String();
         _syncSupplierToFirebase(updatedSupplierData);
-
-        print(
-            '✅ Supplier purchases updated: $supplierId -> Total: $newTotal, Monthly: $newMonthly, Yearly: $newYearly');
       } else {
-        print('❌ Supplier NOT found in SQLite: $supplierId');
-        print('🔄 Attempting to create supplier from Firebase...');
 
         // Firebase'dan supplier bilgisini al ve SQLite'a ekle
         final firebaseSupplier = await _getSupplierFromFirebase(supplierId);
         if (firebaseSupplier != null) {
-          print('✅ Found supplier in Firebase, syncing to SQLite...');
           await _insertSupplierFromFirebase(firebaseSupplier);
 
           // Şimdi manuel olarak totals güncelle (recursion önlemek için)
           await _updateSupplierTotalsDirectly(supplierId, amount, add: add);
         } else {
-          print('❌ Supplier not found in Firebase either: $supplierId');
         }
       }
     } catch (e) {
-      print('❌ Error updating supplier totals: $e');
-      print('📍 Stack trace: ${StackTrace.current}');
     }
   }
 
@@ -1101,7 +1025,6 @@ class DatabaseService {
       }
       return null;
     } catch (e) {
-      print('❌ Error getting supplier from Firebase: $e');
       return null;
     }
   }
@@ -1145,10 +1068,7 @@ class DatabaseService {
 
       await db.insert('suppliers', supplierData,
           conflictAlgorithm: ConflictAlgorithm.replace);
-      print(
-          '✅ Supplier synced from Firebase to SQLite: ${supplierData['id']} - ${supplierData['name']}');
     } catch (e) {
-      print('❌ Error inserting supplier from Firebase: $e');
     }
   }
 
@@ -1199,12 +1119,8 @@ class DatabaseService {
         updatedSupplierData['yearly_purchases'] = newYearly;
         updatedSupplierData['updated_at'] = DateTime.now().toIso8601String();
         _syncSupplierToFirebase(updatedSupplierData);
-
-        print(
-            '✅ Supplier purchases updated directly: $supplierId -> Total: $newTotal, Monthly: $newMonthly, Yearly: $newYearly');
       }
     } catch (e) {
-      print('❌ Error updating supplier totals directly: $e');
     }
   }
 
@@ -1241,12 +1157,8 @@ class DatabaseService {
         supplierData['yearly_purchases'] = totalAmount;
         supplierData['updated_at'] = DateTime.now().toIso8601String();
         _syncSupplierToFirebase(supplierData);
-
-        print(
-            '✅ Supplier totals recalculated: $supplierId -> Total: $totalAmount');
       }
     } catch (e) {
-      print('❌ Error recalculating supplier totals: $e');
     }
   }
 
@@ -1265,7 +1177,6 @@ class DatabaseService {
         whereArgs: [purchaseId],
       );
     } catch (e) {
-      print('❌ Error marking purchase for pending sync: $e');
     }
   }
 
@@ -1279,8 +1190,6 @@ class DatabaseService {
         where: 'pending_sync = ?',
         whereArgs: [1],
       );
-
-      print('🔄 Retrying ${pendingSuppliers.length} pending supplier syncs...');
 
       for (final supplierMap in pendingSuppliers) {
         final supplierId = supplierMap['id'] as String;
@@ -1298,7 +1207,6 @@ class DatabaseService {
         await Future.delayed(const Duration(milliseconds: 100));
       }
     } catch (e) {
-      print('❌ Error retrying pending supplier syncs: $e');
     }
   }
 
@@ -1344,11 +1252,8 @@ class DatabaseService {
           where: 'supplier_id = ?',
           whereArgs: [oldId],
         );
-
-        print('✅ Supplier ID updated in SQLite: $oldId -> $newId');
       }
     } catch (e) {
-      print('❌ Error updating supplier ID in SQLite: $e');
     }
   }
 }

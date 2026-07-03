@@ -19,7 +19,6 @@ class StoreSelectionService {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (_cachedStoreId != null) {
-      print('🔄 Using cached store ID: $_cachedStoreId');
       return _cachedStoreId!;
     }
 
@@ -28,33 +27,25 @@ class StoreSelectionService {
 
     if (savedStoreId != null && savedStoreId.isNotEmpty) {
       _cachedStoreId = savedStoreId;
-      print('🔄 Using saved store ID: $savedStoreId');
-      print('⚠️ SHARED PREFS HIT - this might be the problem!');
-      print('⚠️ User: ${currentUser?.email} (${currentUser?.uid})');
       return savedStoreId;
     }
 
     // No saved store ID, use user's own store as default
     if (currentUser != null) {
       final defaultStoreId = 'store_${currentUser.uid}';
-      print('🔄 No saved store, using default store ID: $defaultStoreId');
-      print('🔍 Current user: ${currentUser.email} (${currentUser.uid})');
       await setCurrentStore(defaultStoreId, 'Benim Mağazam');
       return defaultStoreId;
     }
 
     // FALLBACK: Even if no user, return a temporary store ID to prevent crashes
-    print('❌ No current user, returning fallback store ID');
     return 'store_temp_offline'; // Temporary store for offline/guest mode
   }
 
   /// Get current active store name
   Future<String> getCurrentStoreName() async {
     final currentUser = FirebaseAuth.instance.currentUser;
-    print('🔍 getCurrentStoreName called for user: ${currentUser?.email}');
 
     if (_cachedStoreName != null) {
-      print('🔄 Using cached store name: $_cachedStoreName');
       return _cachedStoreName!;
     }
 
@@ -63,11 +54,8 @@ class StoreSelectionService {
 
     if (savedStoreName != null && savedStoreName.isNotEmpty) {
       _cachedStoreName = savedStoreName;
-      print('💾 Using saved store name: $savedStoreName');
       return savedStoreName;
     }
-
-    print('⚠️ No store name found, returning default');
     return 'Mağaza';
   }
 
@@ -75,19 +63,13 @@ class StoreSelectionService {
   Future<void> setCurrentStore(String storeId, String storeName) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
-      print('❌ Cannot set store: No authenticated user');
       return;
     }
-
-    print('🔍 Setting store - User: ${currentUser.email} (${currentUser.uid})');
-    print('🔍 Requested store: $storeId');
-    print('🔍 Store name: $storeName');
 
     // DİNAMİK GÜVENLİK KONTROLÜ - kullanıcının gerçekten erişimi var mı?
     final hasAccess = await _verifyStoreAccess(currentUser.uid, storeId);
 
     if (hasAccess) {
-      print('✅ User has access to store: $storeId');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_currentStoreIdKey, storeId);
@@ -95,16 +77,10 @@ class StoreSelectionService {
 
       _cachedStoreId = storeId;
       _cachedStoreName = storeName;
-
-      print(
-          '✅ Active store set: $storeName ($storeId) for user ${currentUser.email}');
     } else {
-      print(
-          '❌ SECURITY WARNING: User ${currentUser.email} has no access to store $storeId');
 
       // Fallback to user's own store
       final ownStoreId = 'store_${currentUser.uid}';
-      print('⚠️ Falling back to own store: $ownStoreId');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_currentStoreIdKey, ownStoreId);
@@ -121,7 +97,6 @@ class StoreSelectionService {
       // 1. Kendi mağazası mı? (store_userId formatında)
       final ownStoreId = 'store_$userId';
       if (storeId == ownStoreId) {
-        print('👤 Own store access: $storeId');
         return true;
       }
 
@@ -135,7 +110,6 @@ class StoreSelectionService {
         final storeData = storeDoc.data()!;
         final ownerId = storeData['ownerId'];
         if (ownerId == userId) {
-          print('👤 Store owner access: $storeId');
           return true;
         }
       }
@@ -150,7 +124,6 @@ class StoreSelectionService {
         final userData = userDoc.data()!;
         final assignedStoreId = userData['storeId'];
         if (assignedStoreId == storeId) {
-          print('👥 Invited user access: $storeId');
           return true;
         }
       }
@@ -165,14 +138,10 @@ class StoreSelectionService {
           .get();
 
       if (invitationQuery.docs.isNotEmpty) {
-        print('👥 Invitation-based access: $storeId');
         return true;
       }
-
-      print('❌ No access found for user $userId to store $storeId');
       return false;
     } catch (e) {
-      print('❌ Error verifying store access: $e');
       return false;
     }
   }
@@ -231,7 +200,6 @@ class StoreSelectionService {
 
       return stores;
     } catch (e) {
-      print('❌ Error getting available stores: $e');
       return stores;
     }
   }
@@ -242,12 +210,8 @@ class StoreSelectionService {
     if (currentUser == null) return;
 
     try {
-      print('🔄 Initializing store selection for user: ${currentUser.uid}');
-      print('🔄 User email: ${currentUser.email}');
 
       // FORCE CLEAR STORE CACHE FIRST - this is critical!
-      print(
-          '🗑️ FORCE CLEARING store cache and store-related SharedPreferences...');
       _cachedStoreId = null;
       _cachedStoreName = null;
       final prefs = await SharedPreferences.getInstance();
@@ -255,7 +219,6 @@ class StoreSelectionService {
       // Clear only store-related keys, not ALL SharedPreferences
       await prefs.remove(_currentStoreIdKey);
       await prefs.remove(_currentStoreNameKey);
-      print('🗑️ FORCED clearing of store-specific keys only');
 
       // Check if user document exists and get user data
       final userDoc = await FirebaseFirestore.instance
@@ -269,18 +232,11 @@ class StoreSelectionService {
         final userStoreId = userData['storeId'];
         final userStoreName = userData['storeName'];
 
-        print('🔍 User email: ${currentUser.email}');
-        print('🔍 User UID: ${currentUser.uid}');
-        print('🔍 User role: $userRole');
-        print('🔍 User storeId from Firestore: $userStoreId');
-        print('🔍 User storeName from Firestore: $userStoreName');
-
         // If user is invited (has role other than owner), use the assigned store
         if (userRole != 'owner' &&
             userStoreId != null &&
             userStoreId.isNotEmpty &&
             userStoreId != 'store_${currentUser.uid}') {
-          print('👥 Invited user detected, using assigned store: $userStoreId');
 
           // Davet edilen kullanıcı için doğru mağaza adını Firebase'den al
           String realStoreName = 'Mağaza';
@@ -298,9 +254,7 @@ class StoreSelectionService {
             } else {
               realStoreName = 'mhmmdclk97\'in Mağazası'; // Mağaza bulunamazsa
             }
-            print('🏪 Firebase\'den alınan mağaza adı: $realStoreName');
           } catch (e) {
-            print('⚠️ Could not get store name: $e');
             realStoreName = 'Davet Edildiğim Mağaza';
           }
 
@@ -313,8 +267,6 @@ class StoreSelectionService {
         if (userStoreId != null &&
             userStoreId.isNotEmpty &&
             userStoreId != ownStoreId) {
-          print(
-              '👥 User has different storeId (invited user): $userStoreId vs expected $ownStoreId');
 
           // Davet edilen kullanıcı için doğru mağaza adını Firebase'den al
           String realStoreName = 'Mağaza';
@@ -332,9 +284,7 @@ class StoreSelectionService {
             } else {
               realStoreName = 'mhmmdclk97\'in Mağazası'; // Mağaza bulunamazsa
             }
-            print('🏪 Firebase\'den alınan mağaza adı (2): $realStoreName');
           } catch (e) {
-            print('⚠️ Could not get store name (2): $e');
             realStoreName = 'Davet Edildiğim Mağaza';
           }
 
@@ -342,9 +292,6 @@ class StoreSelectionService {
           return;
         }
         // If user is owner or no specific store assigned, use their own store
-        print('👤 Owner/Regular user detected, using own store: $ownStoreId');
-        print('   Current user UID: ${currentUser.uid}');
-        print('   User role: $userRole');
 
         // Get store name from stores collection
         String storeName = 'Benim Mağazam';
@@ -357,12 +304,9 @@ class StoreSelectionService {
           if (storeDoc.exists) {
             storeName = storeDoc.data()?['name'] ?? 'Benim Mağazam';
             if (storeName.isEmpty) storeName = 'Benim Mağazam';
-            print('   Store name from Firestore: $storeName');
           } else {
-            print('   ⚠️ Store document not found, using default name');
           }
         } catch (e) {
-          print('⚠️ Could not get store name: $e');
         }
 
         await setCurrentStore(ownStoreId, storeName);
@@ -370,10 +314,8 @@ class StoreSelectionService {
       }
 
       // No user document, use default logic
-      print('⚠️ No user document found, using default store');
       await getCurrentStoreId();
     } catch (e) {
-      print('❌ Error initializing store selection: $e');
       // Fallback to default
       await getCurrentStoreId();
     }
@@ -381,19 +323,14 @@ class StoreSelectionService {
 
   /// Clear cache and SharedPreferences (for logout)
   Future<void> clearCache() async {
-    print('🗑️ Starting store selection cache clear...');
 
     // Clear in-memory cache
     _cachedStoreId = null;
     _cachedStoreName = null;
-    print('🗑️ In-memory cache cleared');
 
     // Clear ONLY store-related SharedPreferences, not ALL
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_currentStoreIdKey);
     await prefs.remove(_currentStoreNameKey);
-    print('🗑️ Store-specific SharedPreferences cleared');
-
-    print('✅ Store selection cache cleared (other app settings preserved)');
   }
 }

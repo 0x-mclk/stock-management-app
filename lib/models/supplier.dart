@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Supplier {
   final String? id;
   final String storeId; // ✅ Store isolation için eklendi
@@ -73,20 +75,37 @@ class Supplier {
   factory Supplier.fromMap(Map<String, dynamic> map) {
     return Supplier(
       id: map['id']?.toString(),
-      storeId: map['store_id'] ?? '', // ✅ Store ID eklendi
-      name: map['name'] ?? '',
-      phone: map['phone'],
-      email: map['email'],
-      address: map['address'],
-      notes: map['notes'],
-      debt: (map['debt'] ?? 0).toDouble(),
-      totalPurchases: (map['total_purchases'] ?? 0).toDouble(),
-      monthlyPurchases: (map['monthly_purchases'] ?? 0).toDouble(),
-      yearlyPurchases: (map['yearly_purchases'] ?? 0).toDouble(),
-      createdAt: DateTime.parse(map['created_at']),
-      updatedAt: DateTime.parse(map['updated_at']),
+      storeId: (map['store_id'] ?? map['storeId'] ?? '').toString(),
+      name: map['name']?.toString() ?? '',
+      phone: map['phone']?.toString(),
+      email: map['email']?.toString(),
+      address: map['address']?.toString(),
+      notes: map['notes']?.toString(),
+      debt: _toDouble(map['debt']),
+      totalPurchases: _toDouble(map['total_purchases']),
+      monthlyPurchases: _toDouble(map['monthly_purchases']),
+      yearlyPurchases: _toDouble(map['yearly_purchases']),
+      createdAt: _parseDateTime(map['created_at'] ?? map['createdAt']),
+      updatedAt: _parseDateTime(
+        map['updated_at'] ?? map['updatedAt'] ?? map['lastModified'],
+      ),
     );
-    // Note: isActive sadece Firebase'de filtering için kullanılıyor
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0.0;
+  }
+
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
   }
 
   Supplier copyWith({

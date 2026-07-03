@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 import '../services/real_time_service.dart';
 import '../services/invitation_service.dart';
 import '../models/invitation_model.dart';
+import '../utils/role_display.dart';
 
 class MultiUserIndicatorsWidget extends StatefulWidget {
   final String storeId;
@@ -21,108 +22,78 @@ class MultiUserIndicatorsWidget extends StatefulWidget {
       _MultiUserIndicatorsWidgetState();
 }
 
-class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
+class _MultiUserIndicatorsWidgetState
+    extends State<MultiUserIndicatorsWidget> {
   final RealTimeService _realTimeService = RealTimeService.instance;
   final InvitationService _invitationService = InvitationService.instance;
+
+  // Aktivite güncellemesini kısıtla — initState'de 1 kez çalışır
+  bool _activityUpdated = false;
 
   @override
   void initState() {
     super.initState();
-    print(
-        '🚀 MultiUserIndicatorsWidget initState - StoreID: ${widget.storeId}, UserID: ${widget.currentUserId}');
-    _updateUserActivity();
+    _scheduleActivityUpdate();
   }
 
-  void _updateUserActivity() async {
-    // Doğru mağaza adını al
-    String storeName = 'Mağaza';
+  void _scheduleActivityUpdate() {
+    if (_activityUpdated) return;
+    _activityUpdated = true;
+    // İlk frame sonrasında arka planda çalıştır, UI'yı bloke etmesin
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _updateUserActivity();
+    });
+  }
+
+  Future<void> _updateUserActivity() async {
     try {
       final storeDoc = await FirebaseFirestore.instance
           .collection('stores')
           .doc(widget.storeId)
           .get();
-      if (storeDoc.exists) {
-        storeName = storeDoc.data()?['name'] ?? 'Mağaza';
-        if (storeName.isEmpty) {
-          storeName = 'Mağaza';
-        }
-      }
-      print('🏪 _updateUserActivity için kullanılacak mağaza adı: $storeName');
-    } catch (e) {
-      print('⚠️ _updateUserActivity de mağaza adı alınamadı: $e');
-    }
+      final storeData = storeDoc.data();
+      final storeName = (storeData != null ? storeData['name'] : null) ?? 'Mağaza';
 
-    // Mevcut kullanıcının aktivitesini güncelle
-    await _realTimeService.updateUserActivity(
-      storeId: widget.storeId,
-      userId: widget.currentUserId,
-      storeName: storeName, // Doğru mağaza adını gönder
-    );
+      await _realTimeService.updateUserActivity(
+        storeId: widget.storeId,
+        userId: widget.currentUserId,
+        storeName: storeName,
+      );
 
-    // Mağaza sahibi kaydının var olduğundan emin ol
-    await _ensureStoreOwnerExists();
-
-    // Tüm store üyelerinin aktivite bilgilerini senkronize et
-    await _synchronizeAllMembersActivity();
+      await _ensureStoreOwnerExists();
+      await _synchronizeAllMembersActivity();
+    } catch (_) {}
   }
 
-  /// Mağaza sahibi kaydının var olduğundan emin ol (SADECE gerçek sahipler için)
   Future<void> _ensureStoreOwnerExists() async {
     try {
-      // Firebase Auth'dan mevcut kullanıcının gerçek email'ini al
       final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null || currentUser.email == null) {
-        print('❌ Mevcut kullanıcı bulunamadı veya email adresi yok');
-        return;
-      }
+      if (currentUser == null || currentUser.email == null) return;
 
       final currentUserEmail = currentUser.email!;
       final currentUserId = currentUser.uid;
-      print('📧 Mevcut kullanıcı email: $currentUserEmail');
-      print('🏪 Mevcut store ID: ${widget.storeId}');
 
-      // DİNAMİK KONTROL: Bu kullanıcı bu mağazanın gerçek sahibi mi?
-      final isStoreOwner =
+      final isOwner =
           await _checkIfUserIsStoreOwner(widget.storeId, currentUserId);
+      if (!isOwner) return;
 
-      if (isStoreOwner) {
-        print(
-            '✅ Bu kullanıcı bu mağazanın sahibi - Owner kayıtları oluşturulacak');
-
-        // Mağaza sahibi kaydını temizle ve doğruyu ekle
-        await _invitationService.ensureStoreOwnerExistsWithCleanup(
-          storeId: widget.storeId,
-          userId: widget.currentUserId,
-          email: currentUserEmail,
-        );
-
-        // CRITICAL: Mağaza sahibinin members koleksiyonunda da bulunduğundan emin ol
-        await _ensureOwnerInMembersCollection(currentUserEmail, currentUserId);
-
-        // User activity kayıtlarını da temizle
-        await _realTimeService.cleanupIncorrectUserActivities(
-          storeId: widget.storeId,
-          correctUserId: widget.currentUserId,
-          correctEmail: currentUserEmail,
-        );
-      } else {
-        print('🚫 Bu kullanıcı ($currentUserEmail) bu mağazanın sahibi değil.');
-        print('   Bu kullanıcı muhtemelen davetli üye.');
-        print('   Owner kaydı oluşturulmayacak.');
-      }
-    } catch (e) {
-      print('❌ Mağaza sahibi kaydı oluşturulamadı: $e');
-    }
+      await _invitationService.ensureStoreOwnerExistsWithCleanup(
+        storeId: widget.storeId,
+        userId: widget.currentUserId,
+        email: currentUserEmail,
+      );
+      await _ensureOwnerInMembersCollection(currentUserEmail, currentUserId);
+      await _realTimeService.cleanupIncorrectUserActivities(
+        storeId: widget.storeId,
+        correctUserId: widget.currentUserId,
+        correctEmail: currentUserEmail,
+      );
+    } catch (_) {}
   }
 
-  /// Mağaza sahibinin members koleksiyonunda bulunduğundan emin ol
   Future<void> _ensureOwnerInMembersCollection(
       String email, String userId) async {
     try {
-      print(
-          '🔍 Mağaza sahibinin members koleksiyonundaki kaydı kontrol ediliyor...');
-
-      // Mevcut member kaydını kontrol et
       final memberDoc = await FirebaseFirestore.instance
           .collection('stores')
           .doc(widget.storeId)
@@ -131,14 +102,8 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
           .get();
 
       if (!memberDoc.exists) {
-        print(
-            '⚠️ Mağaza sahibi members koleksiyonunda bulunamadı! Ekleniyor...');
-
-        // Firebase Auth'tan kullanıcı adını al
         final currentUser = FirebaseAuth.instance.currentUser;
         final userName = currentUser?.displayName ?? email.split('@')[0];
-
-        // Member kaydını ekle
         await FirebaseFirestore.instance
             .collection('stores')
             .doc(widget.storeId)
@@ -153,325 +118,138 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
           'joinedAt': FieldValue.serverTimestamp(),
           'isActive': true,
         });
-
-        print('✅ Mağaza sahibi members koleksiyonuna başarıyla eklendi!');
       } else {
-        print('✅ Mağaza sahibi zaten members koleksiyonunda mevcut.');
-
-        // Mevcut kaydı güncelle (eksik alanları doldur)
-        final memberData = memberDoc.data()!;
+        final data = memberDoc.data()!;
         final updates = <String, dynamic>{};
-
-        if (memberData['role'] != 'owner') {
-          updates['role'] = 'owner';
-        }
-        if (memberData['status'] != 'owner') {
-          updates['status'] = 'owner';
-        }
-        if (memberData['isActive'] != true) {
-          updates['isActive'] = true;
-        }
-        if (memberData['userId'] != userId) {
-          updates['userId'] = userId;
-        }
-
-        if (updates.isNotEmpty) {
-          await memberDoc.reference.update(updates);
-          print(
-              '✅ Mağaza sahibi member kaydı güncellendi: ${updates.keys.join(", ")}');
-        }
+        if (data['role'] != 'owner') updates['role'] = 'owner';
+        if (data['status'] != 'owner') updates['status'] = 'owner';
+        if (data['isActive'] != true) updates['isActive'] = true;
+        if (data['userId'] != userId) updates['userId'] = userId;
+        if (updates.isNotEmpty) await memberDoc.reference.update(updates);
       }
-    } catch (e) {
-      print('❌ Mağaza sahibi member kaydı kontrolü hatası: $e');
-    }
+    } catch (_) {}
   }
 
-  /// Tüm store üyelerinin aktivite bilgilerini senkronize et
   Future<void> _synchronizeAllMembersActivity() async {
     try {
-      print('🔄 Store üyelerini almaya başlıyor: StoreID = ${widget.storeId}');
-
-      // Store'daki tüm aktif üyeleri al
       final members =
           await _invitationService.getMembersStream(widget.storeId).first;
 
-      print('👥 Alınan üye sayısı: ${members.length}');
-      for (final member in members) {
-        print(
-            '👤 Üye: ${member.email}, Status: ${member.status}, UserID: ${member.userId}');
-      }
-
-      // Eksik userId alanlarını güncelle
       await _updateMissingUserIds(members);
 
-      // Aktif üyeleri filtrele
       final activeMembers = members
-          .where((member) =>
-              member.status == InvitationStatus.owner ||
-              member.status == InvitationStatus.accepted)
+          .where((m) =>
+              m.status == InvitationStatus.owner ||
+              m.status == InvitationStatus.accepted)
           .toList();
 
-      print('🟢 Aktif üye sayısı: ${activeMembers.length}/${members.length}');
+      final storeDoc = await FirebaseFirestore.instance
+          .collection('stores')
+          .doc(widget.storeId)
+          .get();
+      final storeDocData = storeDoc.data();
+      final storeName = (storeDocData != null ? storeDocData['name'] : null) ?? 'Mağaza';
 
-      // Doğru mağaza adını al
-      String storeName = 'Mağaza';
-      try {
-        final storeDoc = await FirebaseFirestore.instance
-            .collection('stores')
-            .doc(widget.storeId)
-            .get();
-        if (storeDoc.exists) {
-          storeName = storeDoc.data()?['name'] ?? 'Mağaza';
-          if (storeName.isEmpty) {
-            storeName = 'Mağaza';
-          }
-        }
-        print('🏪 User activity için kullanılacak mağaza adı: $storeName');
-      } catch (e) {
-        print('⚠️ Mağaza adı alınamadı: $e');
-      }
-
-      // Batch update için kullanıcı listesi hazırla
-      final usersForBatchUpdate = activeMembers
-          .where((member) => member.userId != null && member.userId!.isNotEmpty)
-          .map((member) => {
-                'userId': member.userId!,
-                'email': member.email,
-                'role': member.role.name,
+      final usersForBatch = activeMembers
+          .where((m) => m.userId != null && m.userId!.isNotEmpty)
+          .map((m) => {
+                'userId': m.userId!,
+                'email': m.email,
+                'role': m.role.name,
               })
           .toList();
 
-      print(
-          '🔄 Batch update için hazırlanan kullanıcı sayısı: ${usersForBatchUpdate.length}');
-
-      // Batch update kullanarak tüm üyelerin aktivitesini güncelle
-      if (usersForBatchUpdate.isNotEmpty) {
+      if (usersForBatch.isNotEmpty) {
         await _realTimeService.batchUpdateUserActivity(
           storeId: widget.storeId,
-          users: usersForBatchUpdate,
-          storeName: storeName, // Doğru mağaza adını gönder
+          users: usersForBatch,
+          storeName: storeName,
         );
       }
-
-      print(
-          '🔄 Tüm store üyelerinin aktivite bilgileri senkronize edildi (${usersForBatchUpdate.length} üye) - Mağaza adı: $storeName');
-    } catch (e) {
-      print('❌ Üye aktivite senkronizasyon hatası: $e');
-    }
+    } catch (_) {}
   }
 
-  /// Eksik userId alanlarını güncelle
   Future<void> _updateMissingUserIds(List<InvitationModel> members) async {
     try {
-      // User activity verilerini al
       final activityData =
           await _realTimeService.getUserActivityStream(widget.storeId).first;
 
-      print('🔍 Activity verilerinde ${activityData.length} kullanıcı bulundu');
-
       for (final member in members) {
-        // Eğer userId boşsa, email eşleştirmesi ile bulmaya çalış
         if (member.userId == null || member.userId!.isEmpty) {
-          // E-mail bazlı eşleştirme deneme
           final matchingActivity = activityData.firstWhere(
-            (activity) => activity['email'] == member.email,
+            (a) => a['email'] == member.email,
             orElse: () => <String, dynamic>{},
           );
-
           if (matchingActivity.isNotEmpty && member.id != null) {
-            final foundUserId = matchingActivity['userId'];
-            print('🔄 ${member.email} için userId bulundu: $foundUserId');
-
-            // Member kaydını güncelle
             await _invitationService.updateMemberUserId(
               memberId: member.id!,
-              userId: foundUserId,
+              userId: matchingActivity['userId'],
             );
-          } else {
-            print('⚠️ ${member.email} için activity kaydı bulunamadı');
           }
         }
       }
-    } catch (e) {
-      print('❌ UserId güncelleme hatası: $e');
+    } catch (_) {}
+  }
+
+  Future<bool> _checkIfUserIsStoreOwner(
+      String storeId, String userId) async {
+    try {
+      final storeDoc = await FirebaseFirestore.instance
+          .collection('stores')
+          .doc(storeId)
+          .get();
+      if (!storeDoc.exists) return false;
+      return storeDoc.data()!['ownerId'] == userId;
+    } catch (_) {
+      return false;
     }
   }
 
+  // ─────────────────────────────────────────────
+  // Build — print() YOK
+  // ─────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    print('🔄 MultiUserIndicatorsWidget build called');
-    return Column(
-      children: [
-        _buildOnlineUsers(),
-        const SizedBox(height: 8),
-        _buildMemberOverview(),
-      ],
+    return RepaintBoundary(
+      child: Column(
+        children: [
+          _buildOnlineUsers(),
+          const SizedBox(height: 8),
+          _buildMemberOverview(),
+        ],
+      ),
     );
   }
 
   Widget _buildOnlineUsers() {
-    print('📊 Building online users stream for StoreID: ${widget.storeId}');
-
-    // İki stream'i birleştir: user_activity ve store_invitations
     return StreamBuilder<List<InvitationModel>>(
       stream: _invitationService.getMembersStream(widget.storeId),
       builder: (context, membersSnapshot) {
         if (membersSnapshot.hasError) {
-          print('❌ Members stream error: ${membersSnapshot.error}');
-          return Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              'Üye listesi hatası: ${membersSnapshot.error}',
-              style: const TextStyle(color: Colors.red, fontSize: 12),
-            ),
-          );
+          return _errorBox('Üye listesi hatası');
         }
-
         if (!membersSnapshot.hasData) {
-          print('⏳ Members data loading...');
-          return Container(
-            padding: const EdgeInsets.all(12),
-            child: const Center(
-              child: SizedBox(
-                height: 20,
+          return const Center(
+            child: SizedBox(
                 width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2)),
           );
         }
 
-        final allMembers = membersSnapshot.data!;
-        final activeMembers = allMembers
-            .where((member) =>
-                member.status == InvitationStatus.owner ||
-                member.status == InvitationStatus.accepted)
+        final activeMembers = membersSnapshot.data!
+            .where((m) =>
+                m.status == InvitationStatus.owner ||
+                m.status == InvitationStatus.accepted)
             .toList();
 
-        // Şimdi user_activity stream'ini al
         return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _realTimeService.getUserActivityStream(widget.storeId),
           builder: (context, activitySnapshot) {
-            print(
-                '📊 Activity Stream state: ${activitySnapshot.connectionState}, hasData: ${activitySnapshot.hasData}, error: ${activitySnapshot.error}');
-
-            if (activitySnapshot.hasError) {
-              print('❌ Activity Stream error: ${activitySnapshot.error}');
-              return Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Aktivite stream hatası: ${activitySnapshot.error}',
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
-                ),
-              );
-            }
-
-            // Activity verisi yok ise bile üyeleri göster
             final activityData = activitySnapshot.data ?? [];
-
-            // Üyeleri aktivite verileri ile birleştir
-            List<Map<String, dynamic>> combinedUsers = [];
-
-            for (final member in activeMembers) {
-              // userId varsa direkt eşleştir, yoksa email'dan türet
-              String? userId = member.userId;
-
-              // UserId yoksa, activity verilerinden email ile eşleştirmeye çalış
-              if (userId == null || userId.isEmpty) {
-                // Activity verilerinden bu email'e sahip kullanıcıyı bul
-                final matchingActivity = activityData.firstWhere(
-                  (activity) => activity['email'] == member.email,
-                  orElse: () => <String, dynamic>{},
-                );
-                userId = matchingActivity['userId'];
-
-                // Hala userId bulunamadıysa, email'den unique bir ID türet
-                if (userId == null || userId.isEmpty) {
-                  print(
-                      '⚠️ Üye ${member.email} için userId bulunamadı, varsayılan değer kullanılıyor');
-                  // Email'den basit bir hash oluştur
-                  userId = member.email.hashCode.abs().toString();
-                }
-              }
-
-              // Bu üyenin aktivite verisini bul (userId veya email ile)
-              final activity = activityData.firstWhere(
-                (activity) =>
-                    activity['userId'] == userId ||
-                    activity['email'] == member.email,
-                orElse: () => <String, dynamic>{},
-              );
-
-              // Birleştirilmiş veri oluştur
-              final combinedData = {
-                'userId': userId,
-                'email': member.email,
-                'role': member.role.name,
-                'storeId': widget.storeId,
-                'lastActivity': activity['lastActivity'] ?? member.lastActivity,
-                'isActive': activity['isActive'] ?? true,
-                'memberStatus': member.status.name,
-                'hasRealActivity':
-                    activity.isNotEmpty, // Gerçek aktivite verisi var mı?
-              };
-
-              print(
-                  '👤 Combined user: ${member.email}, userId: $userId, hasActivity: ${activity.isNotEmpty}');
-              combinedUsers.add(combinedData);
-            }
-
-            print(
-                '👥 Combined users data: ${combinedUsers.length} üye (${activeMembers.length} aktif üyeden)');
-
-            // Online kullanıcıları filtrele
-            final onlineUsers = combinedUsers.where((user) {
-              final lastActivity = user['lastActivity'];
-              final hasRealActivity = user['hasRealActivity'] ?? false;
-
-              // Gerçek aktivite verisi yoksa, üyeyi varsayılan olarak çevrimiçi say
-              if (!hasRealActivity) {
-                print(
-                    '🟡 ${user['email']} - gerçek aktivite verisi yok, varsayılan olarak çevrimiçi');
-                return true;
-              }
-
-              if (lastActivity == null) {
-                print('🔴 ${user['email']} - lastActivity null');
-                return false;
-              }
-
-              DateTime lastActiveTime;
-              if (lastActivity is DateTime) {
-                lastActiveTime = lastActivity;
-              } else {
-                try {
-                  lastActiveTime = lastActivity.toDate();
-                } catch (e) {
-                  print('🔴 ${user['email']} - lastActivity format hatası: $e');
-                  return false;
-                }
-              }
-
-              final now = DateTime.now();
-              final difference = now.difference(lastActiveTime);
-              final isOnline =
-                  difference.inMinutes < 5; // 5 dakika içinde aktif
-
-              print(
-                  '👤 ${user['email']} - Son aktivite: ${difference.inMinutes} dakika önce, Çevrimiçi: $isOnline');
-              return isOnline;
-            }).toList();
-
-            print(
-                '🟢 Online users: ${onlineUsers.length}/${combinedUsers.length}');
+            final combinedUsers = _combineUsersWithActivity(
+                activeMembers, activityData);
+            final onlineUsers = _filterOnlineUsers(combinedUsers);
 
             if (onlineUsers.isEmpty) {
               return Container(
@@ -486,11 +264,9 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                         color: Colors.grey, size: 16),
                     const SizedBox(width: 8),
                     Text(
-                      'Toplam ${combinedUsers.length} üye var, şu anda kimse çevrimiçi değil',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
+                      'Toplam ${combinedUsers.length} üye, şu an çevrimiçi yok',
+                      style:
+                          TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
                   ],
                 ),
@@ -502,7 +278,8 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
               decoration: BoxDecoration(
                 color: Colors.green.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                border: Border.all(
+                    color: Colors.green.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,17 +287,16 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                   Row(
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Çevrimiçi Takım (${onlineUsers.length}/${combinedUsers.length})',
+                          'Çevrimiçi Takım '
+                          '(${onlineUsers.length}/${combinedUsers.length})',
                           style: TextStyle(
                             color: Colors.green[700],
                             fontWeight: FontWeight.bold,
@@ -536,7 +312,7 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                     spacing: 8,
                     runSpacing: 4,
                     children: onlineUsers
-                        .map((user) => _buildUserChip(user))
+                        .map((u) => _buildUserChip(u))
                         .toList(),
                   ),
                 ],
@@ -548,29 +324,62 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
     );
   }
 
+  List<Map<String, dynamic>> _combineUsersWithActivity(
+      List<InvitationModel> members,
+      List<Map<String, dynamic>> activityData) {
+    return members.map((member) {
+      String? userId = member.userId;
+      if (userId == null || userId.isEmpty) {
+        final match = activityData.firstWhere(
+          (a) => a['email'] == member.email,
+          orElse: () => <String, dynamic>{},
+        );
+        userId = match['userId'] as String? ??
+            member.email.hashCode.abs().toString();
+      }
+
+      final activity = activityData.firstWhere(
+        (a) => a['userId'] == userId || a['email'] == member.email,
+        orElse: () => <String, dynamic>{},
+      );
+
+      return {
+        'userId': userId,
+        'email': member.email,
+        'role': member.role.name,
+        'storeId': widget.storeId,
+        'lastActivity': activity['lastActivity'] ?? member.lastActivity,
+        'isActive': activity['isActive'] ?? true,
+        'memberStatus': member.status.name,
+        'hasRealActivity': activity.isNotEmpty,
+      };
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _filterOnlineUsers(
+      List<Map<String, dynamic>> users) {
+    return users.where((user) {
+      if (!(user['hasRealActivity'] as bool)) return true;
+      final lastActivity = user['lastActivity'];
+      if (lastActivity == null) return false;
+      try {
+        final DateTime lastActiveTime = lastActivity is DateTime
+            ? lastActivity
+            : lastActivity.toDate();
+        return DateTime.now().difference(lastActiveTime).inMinutes < 5;
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+  }
+
   Widget _buildUserChip(Map<String, dynamic> user) {
-    final email = user['email'] ?? '';
-    final role = user['role'] ?? '';
+    final email = user['email'] as String? ?? '';
+    final role = user['role'] as String? ?? '';
     final username = email.contains('@') ? email.split('@')[0] : email;
     final isCurrentUser = user['userId'] == widget.currentUserId;
 
-    Color chipColor;
-    switch (role) {
-      case 'owner':
-        chipColor = Colors.purple;
-        break;
-      case 'manager':
-        chipColor = Colors.blue;
-        break;
-      case 'staff':
-        chipColor = Colors.green;
-        break;
-      case 'partner':
-        chipColor = Colors.orange;
-        break;
-      default:
-        chipColor = Colors.grey;
-    }
+    final chipColor = RoleDisplay.colorFromString(role);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -586,20 +395,18 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: chipColor,
-              shape: BoxShape.circle,
-            ),
-          ),
+              width: 6,
+              height: 6,
+              decoration:
+                  BoxDecoration(color: chipColor, shape: BoxShape.circle)),
           const SizedBox(width: 6),
           Text(
             isCurrentUser ? '$username (Sen)' : username,
             style: TextStyle(
               color: chipColor.withValues(alpha: 0.8),
               fontSize: 10,
-              fontWeight: isCurrentUser ? FontWeight.bold : FontWeight.normal,
+              fontWeight:
+                  isCurrentUser ? FontWeight.bold : FontWeight.normal,
             ),
           ),
         ],
@@ -608,36 +415,12 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
   }
 
   Widget _buildMemberOverview() {
-    print('📊 Building member overview stream for StoreID: ${widget.storeId}');
     return StreamBuilder<List<InvitationModel>>(
       stream: _invitationService.getMembersStream(widget.storeId),
       builder: (context, snapshot) {
-        print(
-            '📊 Member stream state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, error: ${snapshot.error}');
-
-        if (snapshot.hasError) {
-          print('❌ Member stream error: ${snapshot.error}');
-          return Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              'Üye listesi hatası: ${snapshot.error}',
-              style: const TextStyle(color: Colors.red, fontSize: 12),
-            ),
-          );
-        }
-
+        if (snapshot.hasError) return _errorBox('Üye listesi hatası');
         if (!snapshot.hasData) {
-          print('⏳ Member data loading...');
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(20.0),
-              child: CircularProgressIndicator(),
-            ),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
 
         final members = snapshot.data!;
@@ -654,27 +437,28 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
 
         return Column(
           children: [
-            // Genel özet
+            // Özet
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.blue.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+                border: Border.all(
+                    color: Colors.blue.withValues(alpha: 0.2)),
               ),
               child: Column(
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.groups, color: Colors.blue, size: 16),
+                      const Icon(Icons.groups,
+                          color: Colors.blue, size: 16),
                       const SizedBox(width: 8),
                       Text(
                         'Takım Özeti',
                         style: TextStyle(
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
+                            color: Colors.blue[700],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14),
                       ),
                     ],
                   ),
@@ -682,64 +466,54 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildStatItem(
-                        'Aktif',
-                        activeMembers.length.toString(),
-                        Colors.green,
-                        Icons.check_circle,
-                      ),
-                      _buildStatItem(
-                        'Bekleyen',
-                        pendingInvites.length.toString(),
-                        Colors.orange,
-                        Icons.schedule,
-                      ),
-                      _buildStatItem(
-                        'Toplam',
-                        members.length.toString(),
-                        Colors.blue,
-                        Icons.group,
-                      ),
+                      _buildStatItem('Aktif',
+                          activeMembers.length.toString(), Colors.green,
+                          Icons.check_circle),
+                      _buildStatItem('Bekleyen',
+                          pendingInvites.length.toString(), Colors.orange,
+                          Icons.schedule),
+                      _buildStatItem('Toplam',
+                          members.length.toString(), Colors.blue,
+                          Icons.group),
                     ],
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 16),
-
-            // Detaylı üye listesi
-            if (activeMembers.isNotEmpty)
+            if (activeMembers.isNotEmpty) ...[
+              const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.green.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
-                  border:
-                      Border.all(color: Colors.green.withValues(alpha: 0.2)),
+                  border: Border.all(
+                      color: Colors.green.withValues(alpha: 0.2)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.people, color: Colors.green, size: 16),
+                        const Icon(Icons.people,
+                            color: Colors.green, size: 16),
                         const SizedBox(width: 8),
                         Text(
-                          'Aktif Takım Üyeleri (${activeMembers.length})',
+                          'Aktif Üyeler (${activeMembers.length})',
                           style: TextStyle(
-                            color: Colors.green[700],
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                              color: Colors.green[700],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    ...activeMembers.map((member) => _buildMemberTile(member)),
+                    ...activeMembers.map((m) => _buildMemberTile(m)),
                   ],
                 ),
               ),
+            ],
 
             if (pendingInvites.isNotEmpty) ...[
               const SizedBox(height: 12),
@@ -748,8 +522,8 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
-                  border:
-                      Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+                  border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.2)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -762,15 +536,14 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                         Text(
                           'Bekleyen Davetler (${pendingInvites.length})',
                           style: TextStyle(
-                            color: Colors.orange[700],
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                              color: Colors.orange[700],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    ...pendingInvites.map((member) => _buildMemberTile(member)),
+                    ...pendingInvites.map((m) => _buildMemberTile(m)),
                   ],
                 ),
               ),
@@ -783,8 +556,8 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
 
   Widget _buildMemberTile(InvitationModel member) {
     final isCurrentUser = member.userId == widget.currentUserId;
-    final roleColor = _getRoleColor(member.role);
-    final statusColor = _getStatusColor(member.status);
+    final roleColor = RoleDisplay.color(member.role);
+    final statusColor = _statusColor(member.status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -800,15 +573,13 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
+              color: Colors.grey.withValues(alpha: 0.1),
+              blurRadius: 2,
+              offset: const Offset(0, 1)),
         ],
       ),
       child: Row(
         children: [
-          // Avatar
           Container(
             width: 36,
             height: 36,
@@ -816,18 +587,12 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
               color: roleColor.withValues(alpha: 0.1),
               shape: BoxShape.circle,
               border: Border.all(
-                color: roleColor.withValues(alpha: 0.3),
-              ),
+                  color: roleColor.withValues(alpha: 0.3)),
             ),
-            child: Icon(
-              _getRoleIcon(member.role),
-              color: roleColor,
-              size: 18,
-            ),
+            child:
+                Icon(RoleDisplay.icon(member.role), color: roleColor, size: 18),
           ),
           const SizedBox(width: 12),
-
-          // Kullanıcı bilgileri
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -838,11 +603,11 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                       child: Text(
                         member.email,
                         style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color:
-                              isCurrentUser ? Colors.blue[700] : Colors.black87,
-                        ),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: isCurrentUser
+                                ? Colors.blue[700]
+                                : Colors.black87),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -854,68 +619,38 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
                           color: Colors.blue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Text(
-                          'Siz',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        child: Text('Siz',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.bold)),
                       ),
                   ],
                 ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    // Rol badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: roleColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        _getRoleDisplayName(member.role),
+                    _badge(member.roleDisplayName, roleColor),
+                    if (member.roleSubtitle != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        member.roleSubtitle!,
                         style: TextStyle(
-                          fontSize: 11,
-                          color: roleColor,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
-                    ),
+                    ],
                     const SizedBox(width: 8),
-
-                    // Durum badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        _getStatusDisplayName(member.status),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: statusColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    _badge(member.statusDisplayName, statusColor),
                   ],
                 ),
-
-                // Son aktivite (varsa)
                 if (member.lastActivity != null) ...[
                   const SizedBox(height: 4),
                   Text(
                     'Son aktivite: ${_formatLastActivity(member.lastActivity!)}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                   ),
                 ],
               ],
@@ -926,6 +661,17 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
     );
   }
 
+  Widget _badge(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+      );
+
   Widget _buildStatItem(
       String label, String value, Color color, IconData icon) {
     return Column(
@@ -933,150 +679,48 @@ class _MultiUserIndicatorsWidgetState extends State<MultiUserIndicatorsWidget> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8)),
           child: Icon(icon, color: color, size: 20),
         ),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 10,
-          ),
-        ),
+        Text(value,
+            style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 16)),
+        Text(label,
+            style: TextStyle(color: Colors.grey[600], fontSize: 10)),
       ],
     );
   }
 
-  // Yardımcı metodlar
-  Color _getRoleColor(UserRole role) {
-    switch (role) {
-      case UserRole.owner:
-        return Colors.purple;
-      case UserRole.manager:
-        return Colors.blue;
-      case UserRole.staff:
-        return Colors.green;
-      case UserRole.partner:
-        return Colors.orange;
-    }
-  }
+  Widget _errorBox(String msg) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8)),
+        child: Text(msg,
+            style: const TextStyle(color: Colors.red, fontSize: 12)),
+      );
 
-  IconData _getRoleIcon(UserRole role) {
-    switch (role) {
-      case UserRole.owner:
-        return Icons.star;
-      case UserRole.manager:
-        return Icons.manage_accounts;
-      case UserRole.staff:
-        return Icons.person;
-      case UserRole.partner:
-        return Icons.handshake;
-    }
-  }
-
-  String _getRoleDisplayName(UserRole role) {
-    switch (role) {
-      case UserRole.owner:
-        return 'Sahip';
-      case UserRole.manager:
-        return 'Yönetici';
-      case UserRole.staff:
-        return 'Personel';
-      case UserRole.partner:
-        return 'Ortak';
-    }
-  }
-
-  Color _getStatusColor(InvitationStatus status) {
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+  Color _statusColor(InvitationStatus status) {
     switch (status) {
-      case InvitationStatus.owner:
-        return Colors.purple;
-      case InvitationStatus.accepted:
-        return Colors.green;
-      case InvitationStatus.invited:
-        return Colors.blue;
-      case InvitationStatus.pending:
-        return Colors.orange;
-      case InvitationStatus.approved:
-        return Colors.teal;
-      case InvitationStatus.rejected:
-        return Colors.red;
-    }
-  }
-
-  String _getStatusDisplayName(InvitationStatus status) {
-    switch (status) {
-      case InvitationStatus.owner:
-        return 'Sahip';
-      case InvitationStatus.accepted:
-        return 'Aktif';
-      case InvitationStatus.invited:
-        return 'Davet Edildi';
-      case InvitationStatus.pending:
-        return 'Beklemede';
-      case InvitationStatus.approved:
-        return 'Onaylandı';
-      case InvitationStatus.rejected:
-        return 'Reddedildi';
+      case InvitationStatus.owner: return const Color(0xFF2196F3);
+      case InvitationStatus.accepted: return Colors.green;
+      case InvitationStatus.invited: return Colors.blue;
+      case InvitationStatus.pending: return Colors.orange;
+      case InvitationStatus.approved: return Colors.teal;
+      case InvitationStatus.rejected: return Colors.red;
     }
   }
 
   String _formatLastActivity(DateTime lastActivity) {
-    final now = DateTime.now();
-    final difference = now.difference(lastActivity);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays} gün önce';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} saat önce';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} dakika önce';
-    } else {
-      return 'Az önce';
-    }
-  }
-
-  /// Kullanıcının mağaza sahibi olup olmadığını dinamik olarak kontrol et
-  Future<bool> _checkIfUserIsStoreOwner(String storeId, String userId) async {
-    try {
-      // Stores koleksiyonundaki mağaza bilgisini kontrol et
-      final storeDoc = await FirebaseFirestore.instance
-          .collection('stores')
-          .doc(storeId)
-          .get();
-
-      if (!storeDoc.exists) {
-        print('⚠️ Mağaza bulunamadı: $storeId');
-        return false;
-      }
-
-      final storeData = storeDoc.data()!;
-      final ownerId = storeData['ownerId'];
-
-      print('🔍 Mağaza sahibi kontrolü:');
-      print('   Store ID: $storeId');
-      print('   Expected Owner ID: $ownerId');
-      print('   Current User ID: $userId');
-
-      // Eğer bu kullanıcı mağazanın ownerId'si ile eşleşiyorsa, owner'dır
-      final isOwner = (ownerId == userId);
-      print('   Sonuç: ${isOwner ? "OWNER" : "NOT OWNER"}');
-
-      return isOwner;
-    } catch (e) {
-      print('❌ Store owner kontrolü hatası: $e');
-      return false;
-    }
+    final diff = DateTime.now().difference(lastActivity);
+    if (diff.inDays > 0) return '${diff.inDays} gün önce';
+    if (diff.inHours > 0) return '${diff.inHours} saat önce';
+    if (diff.inMinutes > 0) return '${diff.inMinutes} dakika önce';
+    return 'Az önce';
   }
 }

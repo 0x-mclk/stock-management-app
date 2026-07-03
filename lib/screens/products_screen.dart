@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/realtime_product_provider.dart';
 import '../models/product.dart';
 import '../utils/currency_formatter.dart';
+import '../utils/web_utils.dart';
 import 'barcode_scanner_screen.dart';
 import 'add_product_with_camera_screen.dart';
 import '../utils/navigation_helper.dart';
@@ -39,140 +41,361 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = WebBreakpoints.isDesktop(context);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ürün Yönetimi'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () => _showSearchDialog(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showAddProductDialog(),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'import':
-                  _importFromExcel();
-                  break;
-                case 'export':
-                  _exportToExcel();
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'import',
-                child: Row(
+      appBar: isDesktop ? null : _buildMobileAppBar(),
+      body: isDesktop ? _buildDesktopBody(context) : _buildMobileBody(),
+      floatingActionButton: isDesktop
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: 'products_fab',
+              onPressed: () => _showAddProductDialog(),
+              icon: const Icon(Icons.camera_alt),
+              label: const Text('Yeni Ürün'),
+            ),
+    );
+  }
+
+  PreferredSizeWidget _buildMobileAppBar() {
+    return AppBar(
+      title: const Text('Ürün Yönetimi'),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.search),
+          onPressed: () => _showSearchDialog(),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add),
+          onPressed: () => _showAddProductDialog(),
+        ),
+        _buildExcelMenu(),
+      ],
+    );
+  }
+
+  Widget _buildExcelMenu() {
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        if (value == 'import') _importFromExcel();
+        if (value == 'export') _exportToExcel();
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'import',
+          child: Row(children: [
+            Icon(Icons.file_upload),
+            SizedBox(width: 8),
+            Text('Excel\'den İçe Aktar'),
+          ]),
+        ),
+        const PopupMenuItem(
+          value: 'export',
+          child: Row(children: [
+            Icon(Icons.file_download),
+            SizedBox(width: 8),
+            Text('Excel\'e Dışa Aktar'),
+          ]),
+        ),
+      ],
+    );
+  }
+
+  // ─── Desktop Body ───────────────────────────────────────────────────────────
+  Widget _buildDesktopBody(BuildContext context) {
+    return WebPageWrapper(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Page header + action buttons
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.file_upload),
-                    SizedBox(width: 8),
-                    Text('Excel\'den İçe Aktar'),
+                    Text(
+                      'Ürün Yönetimi',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Tüm ürünlerinizi yönetin, stok takibi yapın',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
-              const PopupMenuItem(
-                value: 'export',
-                child: Row(
-                  children: [
-                    Icon(Icons.file_download),
-                    SizedBox(width: 8),
-                    Text('Excel\'e Dışa Aktar'),
-                  ],
-                ),
+              // Action buttons in toolbar
+              _buildExcelMenu(),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: () => _showAddProductDialog(),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Yeni Ürün'),
               ),
             ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Search and Filter Bar
-          Container(
-            padding: const EdgeInsets.all(16),
+          const SizedBox(height: 20),
+
+          // Search bar
+          SizedBox(
+            width: 380,
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Ürün adı, barkod ara...',
-                prefixIcon: const Icon(Icons.search),
+                hintText: 'Ürün adı veya barkod ara...',
+                prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear),
+                        icon: const Icon(Icons.clear, size: 18),
                         onPressed: () {
                           _searchController.clear();
-                          setState(() {
-                            _searchQuery = '';
-                          });
+                          setState(() => _searchQuery = '');
                         },
                       )
                     : null,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+                isDense: true,
               ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
+              onChanged: (v) => setState(() => _searchQuery = v),
             ),
           ),
+          const SizedBox(height: 16),
 
-          // Products List
-          Expanded(
-            child: Consumer<RealtimeProductProvider>(
-              builder: (context, productProvider, child) {
-                final filteredProducts = productProvider.products
-                    .where((product) =>
-                        product.name
-                            .toLowerCase()
-                            .contains(_searchQuery.toLowerCase()) ||
-                        product.barcode.contains(_searchQuery))
-                    .toList();
-
-                if (filteredProducts.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.inventory_2, size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text(
-                          'Henüz ürün bulunmuyor',
-                          style: TextStyle(fontSize: 18, color: Colors.grey),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Yeni ürün eklemek için + butonuna dokunun',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: filteredProducts.length,
-                  itemBuilder: (context, index) {
-                    final product = filteredProducts[index];
-                    return _buildProductCard(product);
-                  },
-                );
-              },
-            ),
-          ),
+          // DataTable
+          Expanded(child: _buildProductDataTable()),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: "products_fab",
-        onPressed: () => _showAddProductDialog(),
-        icon: const Icon(Icons.camera_alt),
-        label: const Text('Yeni Ürün'),
-        tooltip: 'Barkod Tarayarak Ürün Ekle',
-      ),
+    );
+  }
+
+  Widget _buildProductDataTable() {
+    return Consumer<RealtimeProductProvider>(
+      builder: (context, provider, _) {
+        final products = provider.products
+            .where((p) =>
+                p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                p.barcode.contains(_searchQuery))
+            .toList();
+
+        if (products.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inventory_2_rounded,
+                    size: 56, color: Colors.grey.shade300),
+                const SizedBox(height: 16),
+                Text(
+                  _searchQuery.isEmpty
+                      ? 'Henüz ürün eklenmemiş'
+                      : '"$_searchQuery" için sonuç yok',
+                  style:
+                      const TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                if (_searchQuery.isEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Yeni Ürün butonuna tıklayarak ürün ekleyin',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SingleChildScrollView(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowColor: WidgetStateProperty.all(
+                      Colors.grey.shade50),
+                  headingTextStyle: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Colors.black87,
+                  ),
+                  dataTextStyle: const TextStyle(fontSize: 13),
+                  columnSpacing: 24,
+                  horizontalMargin: 20,
+                  columns: const [
+                    DataColumn(label: Text('Ürün Adı')),
+                    DataColumn(label: Text('Barkod')),
+                    DataColumn(label: Text('Stok'), numeric: true),
+                    DataColumn(
+                        label: Text('Satış Fiyatı'), numeric: true),
+                    DataColumn(
+                        label: Text('Alış Fiyatı'), numeric: true),
+                    DataColumn(label: Text('Kategori')),
+                    DataColumn(label: Text('Durum')),
+                    DataColumn(label: Text('İşlemler')),
+                  ],
+                  rows: products.map((p) {
+                    final isLow = p.stock <= p.minStockLevel;
+                    return DataRow(cells: [
+                      DataCell(
+                        Text(p.name,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w500)),
+                      ),
+                      DataCell(Text(p.barcode,
+                          style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12))),
+                      DataCell(Text('${p.stock}',
+                          style: TextStyle(
+                              color: isLow ? Colors.red : null,
+                              fontWeight: isLow
+                                  ? FontWeight.w600
+                                  : null))),
+                      DataCell(Text(CurrencyFormatter.formatWithSymbol(
+                          p.salePrice))),
+                      DataCell(Text(p.purchasePrice != null
+                          ? CurrencyFormatter.formatWithSymbol(
+                              p.purchasePrice!)
+                          : '—')),
+                      DataCell(Text(p.category ?? '—')),
+                      DataCell(_StockBadge(isLow: isLow)),
+                      DataCell(Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.analytics_rounded,
+                                size: 18, color: Colors.blue),
+                            tooltip: 'Analiz',
+                            onPressed: () =>
+                                _navigateToProductAnalysis(p),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: const Icon(Icons.edit_rounded,
+                                size: 18, color: Colors.grey),
+                            tooltip: 'Düzenle',
+                            onPressed: () =>
+                                _showEditProductDialog(p),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: const Icon(Icons.add_box_rounded,
+                                size: 18, color: Colors.green),
+                            tooltip: 'Stok Ekle',
+                            onPressed: () => _showAddStockDialog(p),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: const Icon(Icons.delete_rounded,
+                                size: 18, color: Colors.red),
+                            tooltip: 'Sil',
+                            onPressed: () =>
+                                _showDeleteConfirmation(p),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      )),
+                    ]);
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ─── Mobile Body ────────────────────────────────────────────────────────────
+  Widget _buildMobileBody() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Ürün adı, barkod ara...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onChanged: (v) => setState(() => _searchQuery = v),
+          ),
+        ),
+        Expanded(
+          child: Consumer<RealtimeProductProvider>(
+            builder: (context, productProvider, _) {
+              final filtered = productProvider.products
+                  .where((p) =>
+                      p.name
+                          .toLowerCase()
+                          .contains(_searchQuery.toLowerCase()) ||
+                      p.barcode.contains(_searchQuery))
+                  .toList();
+
+              if (filtered.isEmpty) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inventory_2,
+                          size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text('Henüz ürün bulunmuyor',
+                          style:
+                              TextStyle(fontSize: 18, color: Colors.grey)),
+                      SizedBox(height: 8),
+                      Text('Yeni ürün eklemek için + butonuna dokunun',
+                          style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: filtered.length,
+                itemBuilder: (context, i) =>
+                    _buildProductCard(filtered[i]),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -328,12 +551,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   void _showAddProductDialog() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AddProductWithCameraScreen(),
-      ),
-    );
+    if (WebBreakpoints.isDesktop(context)) {
+      // Web/masaüstü: kamera olmadan form dialog'u aç (mobilde zaten çalışan dialog)
+      _showProductDialog();
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const AddProductWithCameraScreen(),
+        ),
+      );
+    }
   }
 
   void _showEditProductDialog(Product product) {
@@ -776,6 +1004,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   Future<void> _importFromExcel() async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Excel içe aktarma web platformunda desteklenmemektedir'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     try {
       // Dosya seçici
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -824,8 +1061,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
           // ✅ Fiyat mantık kontrolü - Excel import için
           if (purchasePrice > 0 && purchasePrice >= salePrice) {
-            print(
-                '⚠️ Excel Import Uyarısı: $name - Alış fiyatı (₺$purchasePrice) satış fiyatından (₺$salePrice) yüksek/eşit!');
             priceErrorCount++;
             priceErrorProducts.add(name);
             errorCount++;
@@ -834,8 +1069,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
           // ✅ Stok kontrolü - Excel import için negatif stok engelleme
           if (stock < 0 || minStock < 0) {
-            print(
-                '⚠️ Excel Import Uyarısı: $name - Negatif stok değeri! Stok: $stock, Min Stok: $minStock');
             errorCount++;
             continue; // Bu ürünü atla
           }
@@ -925,6 +1158,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   Future<void> _exportToExcel() async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Excel dışa aktarma web platformunda desteklenmemektedir'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     try {
       final productProvider =
           Provider.of<RealtimeProductProvider>(context, listen: false);
@@ -1042,6 +1284,35 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context,
       product: product,
       source: 'products',
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+class _StockBadge extends StatelessWidget {
+  final bool isLow;
+  const _StockBadge({required this.isLow});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: isLow
+            ? Colors.red.withValues(alpha: 0.1)
+            : Colors.green.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        isLow ? 'Stok Az' : 'Normal',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: isLow ? Colors.red : Colors.green,
+        ),
+      ),
     );
   }
 }

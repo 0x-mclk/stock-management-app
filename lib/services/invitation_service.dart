@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/invitation_model.dart';
@@ -281,23 +281,16 @@ class InvitationService {
 
   /// Get all members for a store
   Stream<List<InvitationModel>> getMembersStream(String storeId) {
-    print('🔍 Üye stream arama başladı: StoreID = $storeId');
     return _firestore
         .collection('store_invitations')
         .where('storeId', isEqualTo: storeId)
         .snapshots()
         .map((snapshot) {
-      print('📊 Firestore snapshot aldı: ${snapshot.docs.length} doküman');
 
       final invitations = snapshot.docs.map((doc) {
-        print('📄 Doküman işleniyor: ${doc.id}, data: ${doc.data()}');
         return InvitationModel.fromFirestore(doc);
       }).toList();
-
-      print('👥 Toplam üye sayısı: ${invitations.length}');
       for (final invitation in invitations) {
-        print(
-            '👤 Üye: ${invitation.email}, Status: ${invitation.status}, UserId: ${invitation.userId}');
       }
 
       // Client-side sorting

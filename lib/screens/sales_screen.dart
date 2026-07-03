@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
+import '../utils/web_utils.dart';
 import 'barcode_scanner_screen.dart';
 import 'price_check_screen.dart';
 
@@ -38,15 +40,151 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = WebBreakpoints.isDesktop(context);
+    return isDesktop ? _buildDesktopLayout(context) : _buildMobileLayout();
+  }
+
+  // ─── Desktop layout: left panel (search+cart) + right panel (payment) ───────
+  Widget _buildDesktopLayout(BuildContext context) {
+    return Scaffold(
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left panel — product search + cart
+          Expanded(
+            flex: 3,
+            child: Column(
+              children: [
+                // Page header
+                Container(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey.shade200),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Satış İşlemi',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.search_rounded),
+                        tooltip: 'Ürün Ara',
+                        onPressed: () => _showProductSearch(),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.price_check_rounded),
+                        tooltip: 'Fiyat Kontrol',
+                        onPressed: () => _openPriceCheck(),
+                      ),
+                    ],
+                  ),
+                ),
+                // Barcode / search input
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  child: _buildWebBarcodeInput(),
+                ),
+                // Cart list
+                Expanded(
+                  child: _buildCartSection(),
+                ),
+              ],
+            ),
+          ),
+
+          // Vertical divider
+          VerticalDivider(width: 1, color: Colors.grey.shade200),
+
+          // Right panel — payment summary
+          SizedBox(
+            width: 340,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey.shade200),
+                    ),
+                  ),
+                  child: const Text(
+                    'Sipariş Özeti',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: _buildPaymentSection(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebBarcodeInput() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _barcodeController,
+            decoration: InputDecoration(
+              hintText: 'Barkod girin ve Enter\'a basın...',
+              prefixIcon: const Icon(Icons.qr_code_rounded, size: 20),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              isDense: true,
+            ),
+            onSubmitted: (v) => _addProductByBarcode(v),
+          ),
+        ),
+        const SizedBox(width: 10),
+        OutlinedButton.icon(
+          onPressed: () => _showProductSearch(),
+          icon: const Icon(Icons.search_rounded, size: 18),
+          label: const Text('Ürün Ara'),
+          style: OutlinedButton.styleFrom(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── Mobile layout (unchanged) ───────────────────────────────────────────────
+  Widget _buildMobileLayout() {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('Satış İşlemi'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner),
-            onPressed: () => _scanBarcode(),
-          ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.qr_code_scanner),
+              onPressed: () => _scanBarcode(),
+            ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => _showProductSearch(),
@@ -60,47 +198,35 @@ class _SalesScreenState extends State<SalesScreen> {
       ),
       body: Column(
         children: [
-          // Üstteki kaydırılabilir alan
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  // Ürün Ekleme Alanı
                   _buildProductAddSection(),
-
-                  // Sepet Listesi
                   _buildCartSection(),
-
-                  const SizedBox(height: 60), // 80'den 60'a düşürüldü
+                  const SizedBox(height: 60),
                 ],
               ),
             ),
           ),
         ],
       ),
-      // Alttaki sabit ödeme bölümü
       bottomSheet: Container(
-        margin: const EdgeInsets.only(bottom: 0), // Margin kaldırıldı
         width: double.infinity,
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border(
-            top: BorderSide(
-              color: Colors.grey.shade300,
-              width: 1,
-            ),
-          ),
+              top: BorderSide(color: Colors.grey.shade300, width: 1)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 4,
               offset: const Offset(0, -2),
             ),
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-              12.0, 12.0, 12.0, 8.0), // Alt padding azaltıldı
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
           child: _buildPaymentSection(),
         ),
       ),
@@ -154,23 +280,28 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildCartSection() {
+    final isDesktop = WebBreakpoints.isDesktop(context);
+
     if (cartItems.isEmpty) {
-      return Container(
-        height: 200,
-        child: const Center(
+      return SizedBox(
+        height: isDesktop ? double.infinity : 200,
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.shopping_cart_outlined, size: 64, color: Colors.grey),
-              SizedBox(height: 16),
-              Text(
+              Icon(Icons.shopping_cart_outlined,
+                  size: 56, color: Colors.grey.shade300),
+              const SizedBox(height: 16),
+              const Text(
                 'Sepet Boş',
                 style: TextStyle(fontSize: 18, color: Colors.grey),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
-                'Ürün eklemek için barkod okutun veya arama yapın',
-                style: TextStyle(color: Colors.grey),
+                isDesktop
+                    ? 'Barkod girin veya Ürün Ara butonunu kullanın'
+                    : 'Ürün eklemek için barkod okutun veya arama yapın',
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -179,42 +310,70 @@ class _SalesScreenState extends State<SalesScreen> {
       );
     }
 
+    // Sepet başlığı
+    final header = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).primaryColor.withValues(alpha: 0.07),
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Text(
+            'Sepet',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const Spacer(),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${cartItems.length} ürün',
+              style: TextStyle(
+                color: Theme.of(context).primaryColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Liste
+    final list = ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      itemCount: cartItems.length,
+      itemBuilder: (context, index) {
+        final item = cartItems[index];
+        return _buildCartItem(item, index);
+      },
+    );
+
+    if (isDesktop) {
+      // Desktop: liste Expanded içinde tam yükseklik kullanır
+      return Column(
+        children: [
+          header,
+          Expanded(child: list),
+        ],
+      );
+    }
+
+    // Mobil: maksimum 400px
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Sepet Başlığı
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-          child: Row(
-            children: [
-              const Text(
-                'Sepet',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const Spacer(),
-              Text(
-                '${cartItems.length} ürün',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ),
-
-        // Sepet Öğeleri - Maksimum yükseklik ile sınırlandırılmış
-        Container(
-          constraints: const BoxConstraints(
-            maxHeight: 400, // 300'den 400'e artırıldı
-          ),
-          child: ListView.builder(
-            shrinkWrap: true,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            itemCount: cartItems.length,
-            itemBuilder: (context, index) {
-              final item = cartItems[index];
-              return _buildCartItem(item, index);
-            },
-          ),
+        header,
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 400),
+          child: list,
         ),
       ],
     );
@@ -463,10 +622,10 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _openPriceCheck() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const PriceCheckScreen(),
-      ),
+    showWebPanel(
+      context: context,
+      child: const PriceCheckScreen(),
+      panelWidth: 560,
     );
   }
 
@@ -699,7 +858,6 @@ class _SalesScreenState extends State<SalesScreen> {
       // Satış işlemini kaydet
       await context.read<SalesProvider>().addSale(sale);
 
-      print('✅ Satış başarıyla tamamlandı!');
 
       // Stokları güncelle - RealtimeProductProvider kullan
       final productProvider = context.read<RealtimeProductProvider>();
@@ -717,7 +875,6 @@ class _SalesScreenState extends State<SalesScreen> {
           await productProvider.updateProduct(updatedProduct);
 
           if (finalStock == 0) {
-            print('⚠️ ${product.name} ürününün stoku sıfırlandı');
           }
         }
       }
@@ -732,7 +889,6 @@ class _SalesScreenState extends State<SalesScreen> {
       // Başarı mesajı göster
       _showSaleCompleteDialog(sale);
     } catch (e) {
-      print('❌ Satış tamamlama hatası: $e');
 
       // Kullanıcıya hata mesajı göster
       ScaffoldMessenger.of(context).showSnackBar(

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Purchase {
   final String? id;
   final String supplierId;
@@ -58,16 +60,33 @@ class Purchase {
   factory Purchase.fromMap(Map<String, dynamic> map) {
     return Purchase(
       id: map['id']?.toString(),
-      supplierId: map['supplier_id'] ?? map['supplierId'] ?? '',
-      storeId: map['store_id'] ?? map['storeId'] ?? '',
-      productName: map['product_name'] ?? map['productName'] ?? '',
-      amount: (map['amount'] ?? 0).toDouble(),
-      paymentMethod: map['payment_method'] ?? map['paymentMethod'] ?? 'cash',
-      notes: map['notes'],
-      purchaseDate: DateTime.parse(map['purchase_date'] ?? map['purchaseDate']),
-      createdAt: DateTime.parse(map['created_at'] ?? map['createdAt']),
-      updatedAt: DateTime.parse(map['updated_at'] ?? map['updatedAt']),
+      supplierId: (map['supplier_id'] ?? map['supplierId'] ?? '').toString(),
+      storeId: (map['store_id'] ?? map['storeId'] ?? '').toString(),
+      productName: (map['product_name'] ?? map['productName'] ?? '').toString(),
+      amount: _toDouble(map['amount']),
+      paymentMethod:
+          (map['payment_method'] ?? map['paymentMethod'] ?? 'cash').toString(),
+      notes: map['notes']?.toString(),
+      purchaseDate: _parseDateTime(map['purchase_date'] ?? map['purchaseDate']),
+      createdAt: _parseDateTime(map['created_at'] ?? map['createdAt']),
+      updatedAt: _parseDateTime(map['updated_at'] ?? map['updatedAt']),
     );
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0.0;
+  }
+
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
   }
 
   Purchase copyWith({

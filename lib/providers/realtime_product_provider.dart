@@ -10,197 +10,109 @@ class RealtimeProductProvider extends ChangeNotifier {
   StreamSubscription? _firebaseSubscription;
   final FirestoreService _firestoreService = FirestoreService.instance;
   String? _currentStoreId;
+  bool _isStarting = false; // guard: aynı anda iki kez başlatmayı önler
 
   List<Product> get products => _products;
   bool get isLoading => _isLoading;
   String get currentStoreId => _currentStoreId ?? '';
 
-  // Firebase Real-Time Stream ile ürünleri dinle
+  void _setLoading(bool value) {
+    if (_isLoading == value) return; // gereksiz rebuild'ı önle
+    _isLoading = value;
+    notifyListeners();
+  }
+
   Future<void> startRealtimeUpdates() async {
-    print('🚀 Starting Firebase real-time updates...');
+    // Zaten çalışan bir stream varsa ve aynı mağaza ise yeniden başlatma
+    if (_isStarting) return;
+    _isStarting = true;
 
-    // Store ID'yi al
-    _currentStoreId = await StoreSelectionService.instance.getCurrentStoreId();
+    final storeId = await StoreSelectionService.instance.getCurrentStoreId();
 
-    if (_currentStoreId == null || _currentStoreId!.isEmpty) {
-      print('❌ Store ID bulunamadı');
+    if (storeId == null || storeId.isEmpty) {
+      _isStarting = false;
       return;
     }
 
-    print('🔥 Store ID: $_currentStoreId');
+    // Aynı store için zaten aktif bir subscription varsa dokunma
+    if (_firebaseSubscription != null && _currentStoreId == storeId) {
+      _isStarting = false;
+      return;
+    }
 
-    // Önceki subscription'ı iptal et
+    _currentStoreId = storeId;
     _firebaseSubscription?.cancel();
-
-    // Loading state'i aktifleştir
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
 
     try {
-      // Firebase stream'i başlat
       _firebaseSubscription =
           _firestoreService.getStoreProductsStream(_currentStoreId!).listen(
         (snapshot) {
-          print('🔥 Firebase snapshot alındı: ${snapshot.docs.length} ürün');
-
           try {
-            // Firebase verilerini Product modeline çevir
             final firebaseProducts = snapshot.docs.map((doc) {
               final data = doc.data() as Map<String, dynamic>;
-              data['id'] = doc.id; // Firestore document ID'sini ekle
+              data['id'] = doc.id;
               return Product.fromMap(data);
             }).toList();
-
-            // Ürün listesini güncelle
             _products = firebaseProducts;
-
-            print('✅ Ürünler güncellendi: ${_products.length} adet');
-
-            // Loading'i kapat
-            _isLoading = false;
-
-            // UI'ı güncelle
-            notifyListeners();
-
-            print('⚡ REAL-TIME UPDATE TAMAMLANDI!');
-          } catch (e) {
-            print('❌ Firebase snapshot işleme hatası: $e');
-            _isLoading = false;
+          } catch (_) {
+            // veri dönüşüm hatası — eski listeyi koru
+          } finally {
+            // loading bitti + UI'ı her durumda güncelle
+            if (_isLoading) {
+              _isLoading = false;
+            }
             notifyListeners();
           }
         },
-        onError: (error) {
-          print('❌ Firebase stream hatası: $error');
-          _isLoading = false;
-          notifyListeners();
-        },
+        onError: (_) => _setLoading(false),
       );
-
-      print('✅ Firebase real-time stream başlatıldı');
-    } catch (e) {
-      print('❌ Stream başlatma hatası: $e');
-      _isLoading = false;
-      notifyListeners();
+    } catch (_) {
+      _setLoading(false);
+    } finally {
+      _isStarting = false;
     }
   }
 
-  // Real-time güncellemeleri durdur
   void stopRealtimeUpdates() {
-    print('🛑 Firebase real-time updates durduruluyor');
     _firebaseSubscription?.cancel();
     _firebaseSubscription = null;
   }
 
-  // Ürün ekle ve Firebase'e senkronize et
   Future<bool> addProduct(Product product) async {
-    print('🆕 addProduct çağrıldı: ${product.name}');
-    print('🏪 Current Store ID: $_currentStoreId');
-
-    if (_currentStoreId == null || _currentStoreId!.isEmpty) {
-      print('❌ Store ID bulunamadı - addProduct iptal edildi');
-      return false;
-    }
-
+    if (_currentStoreId == null || _currentStoreId!.isEmpty) return false;
     try {
-      _isLoading = true;
-      notifyListeners();
-
-      print('📦 Ürün verisi: ${product.toMap()}');
-
-      // Firebase'e ekle
-      print('🔥 Firebase\'e kaydetme başlatılıyor...');
-      final success = await _firestoreService.saveProduct(
-        _currentStoreId!,
-        null, // null = yeni ürün
-        product.toMap(),
-      );
-
-      print('🔥 Firebase kaydetme sonucu: $success');
-
-      if (success) {
-        print('✅ Ürün Firebase\'e eklendi - Real-time stream güncelleyecek');
-        return true;
-      } else {
-        print('❌ Ürün Firebase\'e eklenemedi');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Ürün ekleme hatası: $e');
+      return await _firestoreService.saveProduct(
+            _currentStoreId!, null, product.toMap()) ??
+          false;
+    } catch (_) {
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Ürün güncelle
   Future<bool> updateProduct(Product product) async {
-    if (_currentStoreId == null || _currentStoreId!.isEmpty) {
-      print('❌ Store ID bulunamadı');
-      return false;
-    }
-
+    if (_currentStoreId == null || _currentStoreId!.isEmpty) return false;
     try {
-      _isLoading = true;
-      notifyListeners();
-
-      // Firebase'de güncelle
-      final success = await _firestoreService.saveProduct(
-        _currentStoreId!,
-        product.id.toString(),
-        product.toMap(),
-      );
-
-      if (success) {
-        print(
-            '✅ Ürün Firebase\'de güncellendi - Real-time stream güncelleyecek');
-        return true;
-      } else {
-        print('❌ Ürün Firebase\'de güncellenemedi');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Ürün güncelleme hatası: $e');
+      return await _firestoreService.saveProduct(
+            _currentStoreId!, product.id.toString(), product.toMap()) ??
+          false;
+    } catch (_) {
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Ürün sil (API consistency için removeProduct alias)
   Future<void> removeProduct(String productId) async {
     await deleteProduct(productId);
   }
 
-  // Ürün sil
   Future<bool> deleteProduct(String productId) async {
-    if (_currentStoreId == null || _currentStoreId!.isEmpty) {
-      print('❌ Store ID bulunamadı');
-      return false;
-    }
-
+    if (_currentStoreId == null || _currentStoreId!.isEmpty) return false;
     try {
-      _isLoading = true;
-      notifyListeners();
-
-      // Firebase'den sil
-      final success =
-          await _firestoreService.deleteProduct(_currentStoreId!, productId);
-
-      if (success) {
-        print('✅ Ürün Firebase\'den silindi - Real-time stream güncelleyecek');
-        return true;
-      } else {
-        print('❌ Ürün Firebase\'den silinemedi');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Ürün silme hatası: $e');
+      return await _firestoreService.deleteProduct(
+              _currentStoreId!, productId) ??
+          false;
+    } catch (_) {
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 

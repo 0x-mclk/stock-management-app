@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // ✅ SharedPreferences import
@@ -349,34 +349,27 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
       }
     }).catchError((e) {
       // Silent error handling in production
-      print('❌ Logout error: $e');
     });
   }
 
   // ✅ Hem SharedPreferences hem Firebase Auth'dan çıkış
   static Future<bool> _performCompleteLogout() async {
     try {
-      print('🔄 Starting complete logout process...');
 
       // 1. Store Selection Service cache temizleme
       try {
         await StoreSelectionService.instance.clearCache();
-        print('✅ Store Selection cache cleared');
       } catch (storeError) {
-        print('⚠️ Store Selection clearCache error: $storeError');
       }
 
       // 2. SharedPreferences temizleme
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear(); // Tüm verileri temizle
-      print('✅ SharedPreferences cleared');
 
       // 3. Firebase Auth çıkışı
       try {
         await FirebaseAuth.instance.signOut();
-        print('✅ Firebase Auth signed out');
       } catch (firebaseError) {
-        print('⚠️ Firebase signOut error: $firebaseError');
         // Firebase hatası olsa bile devam et
       }
 
@@ -384,16 +377,12 @@ class _StoreMenuWidgetState extends State<StoreMenuWidget> {
       try {
         final authResult =
             await AuthService.instance.logout(clearRemembered: true);
-        print('✅ AuthService logout: ${authResult.success}');
       } catch (authError) {
-        print('⚠️ AuthService logout error: $authError');
         // AuthService hatası olsa bile devam et
       }
 
-      print('✅ Complete logout finished successfully');
       return true;
     } catch (e) {
-      print('❌ Complete logout failed: $e');
       return false;
     }
   }

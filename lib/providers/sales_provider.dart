@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/sale.dart';
 import '../models/product.dart';
 import '../services/data_service.dart';
@@ -46,11 +47,10 @@ class SalesProvider extends ChangeNotifier {
 
   String? _currentStoreId;
 
-  // Initialize store ID
   Future<void> _initializeStoreId() async {
     final storeId = await StoreSelectionService.instance.getCurrentStoreId();
     _currentStoreId = storeId;
-    notifyListeners();
+    // notifyListeners burada gerekli değil; zaten loadSales içinden çağrılıyor
   }
 
   double get cartTotal {
@@ -78,19 +78,14 @@ class SalesProvider extends ChangeNotifier {
         startDate: DateTime(2020, 1, 1),
         endDate: DateTime.now().add(Duration(days: 1)),
       );
-
-      print('📊 Firebase raw sales data: ${salesData.length} entries');
       for (int i = 0; i < salesData.length && i < 3; i++) {
-        print('🔍 Sale $i: ${salesData[i]}');
       }
 
       _sales = salesData.map((data) => Sale.fromMap(data)).toList();
 
       _isInitialized = true;
       notifyListeners();
-      print('✅ ${_sales.length} satış Firebase\'den yüklendi');
     } catch (e) {
-      print('❌ Firebase satışları yükleme hatası: $e');
     } finally {
       setLoading(false);
     }
@@ -170,11 +165,8 @@ class SalesProvider extends ChangeNotifier {
 
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
-        print('❌ Store ID boş! StoreSelectionService durumu kontrol edilecek');
         throw Exception('Kullanıcı giriş yapmamış veya store ID alınamadı');
       }
-
-      print('✅ Store ID: $storeId, Satış kaydediliyor...');
 
       // ✅ Store ID'si boş olan satışlara store ID ata
       final saleWithStore =
@@ -182,8 +174,6 @@ class SalesProvider extends ChangeNotifier {
 
       // ✅ Store ID uyuşmazlığı kontrolü
       if (saleWithStore.storeId != storeId) {
-        print(
-            '⚠️ Sale store ID mismatch: ${saleWithStore.storeId} vs current: $storeId');
         throw Exception('Satış mağaza ID uyuşmazlığı');
       }
 
@@ -195,16 +185,18 @@ class SalesProvider extends ChangeNotifier {
         }
       }
 
-      // ✅ Hem SQLite hem Firestore'a kaydet
-      await _dataService.saveSale(saleWithStore); // Offline cache için
-
-      // ✅ Firebase'e de kaydet (items dahil)
-      final saleData = saleWithStore.toMapForFirebase();
-      await _firestoreService.addSale(storeId, saleData);
+      if (kIsWeb) {
+        // Web: SQLite yok — sadece Firestore'a kaydet
+        final saleData = saleWithStore.toMapForFirebase();
+        await _firestoreService.addSale(storeId, saleData);
+      } else {
+        // Mobil: SQLite offline cache + Firestore sync
+        await _dataService.saveSale(saleWithStore);
+        final saleData = saleWithStore.toMapForFirebase();
+        await _firestoreService.addSale(storeId, saleData);
+      }
 
       await refreshSales(); // Force refresh to get updated data
-
-      print('✅ Satış başarıyla kaydedildi - ID: ${saleWithStore.id}');
 
       // ❌ Firebase Sync DEVRE DIŞI - RealtimeProductProvider kullanıyoruz
       // print('🔄 Sale saved, triggering immediate sync...');
@@ -216,9 +208,6 @@ class SalesProvider extends ChangeNotifier {
       //   // Sync hata verirse de devam et, auto-sync sonra halleder
       // }
     } catch (e) {
-      print('❌ Satış kaydetme hatası: $e');
-      print('📝 Sale data: ${sale.toMap()}');
-      print('🏪 Store ID: $_currentStoreId');
       rethrow;
     }
   }

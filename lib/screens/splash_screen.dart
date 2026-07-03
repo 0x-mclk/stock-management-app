@@ -5,6 +5,7 @@ import '../widgets/offline_status_widget.dart';
 import '../providers/realtime_product_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/supplier_provider.dart';
+import '../providers/role_access_provider.dart';
 import 'main_screen.dart';
 import 'login_screen.dart'; // ✅ Ana login sayfasını kullan
 
@@ -45,7 +46,9 @@ class _SplashScreenState extends State<SplashScreen> {
           supplierProvider.loadSuppliers(),
         ]);
 
-        // Debug print removed
+        final roleAccess =
+            Provider.of<RoleAccessProvider>(context, listen: false);
+        await roleAccess.ensureLoaded();
       }
 
       // Debug print removed

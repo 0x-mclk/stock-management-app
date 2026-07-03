@@ -1,6 +1,8 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, ChangeNotifier;
+import 'package:uuid/uuid.dart';
 import '../models/purchase.dart';
+import '../models/supplier.dart';
 import '../services/database_service.dart';
 import '../services/firestore_service.dart';
 
@@ -30,24 +32,29 @@ class PurchaseProvider with ChangeNotifier {
     _error = null;
 
     try {
-      // İlk olarak SQLite'dan yükle
+      String? finalStoreId = storeId;
+
+      if (kIsWeb) {
+        // Web: SQLite yok — doğrudan Firestore stream
+        if (finalStoreId == null || finalStoreId.isEmpty) {
+          _error = 'Store ID bulunamadı';
+          _setLoading(false);
+          return;
+        }
+        _startFirebaseSupplierListener(supplierId, finalStoreId);
+        _setLoading(false);
+        return;
+      }
+
       final purchaseData =
           await _databaseService.getPurchasesBySupplier(supplierId);
       _purchases = purchaseData.map((data) => Purchase.fromMap(data)).toList();
-      print(
-          '✅ Loaded ${_purchases.length} purchases from SQLite for supplier: $supplierId');
-
-      // UI'ı güncelle
       _setLoading(false);
 
-      // Store ID'yi belirle
-      String? finalStoreId = storeId;
       if (finalStoreId == null || finalStoreId.isEmpty) {
-        // SQLite'dan store ID çekmeye çalış
         if (_purchases.isNotEmpty) {
           finalStoreId = _purchases.first.storeId;
         } else {
-          // Eğer purchase yoksa, tedarikçi bilgisinden al
           final supplierData =
               await _databaseService.getSupplierData(supplierId);
           if (supplierData != null) {
@@ -56,15 +63,11 @@ class PurchaseProvider with ChangeNotifier {
         }
       }
 
-      // Şimdi Firebase listener başlat
       if (finalStoreId != null && finalStoreId.isNotEmpty) {
         _startFirebaseSupplierListener(supplierId, finalStoreId);
-      } else {
-        print('❌ Store ID bulunamadı, Firebase listener başlatılamıyor');
       }
     } catch (e) {
       _error = 'Failed to load purchases: $e';
-      print('❌ Error loading purchases: $e');
       _setLoading(false);
     }
   }
@@ -77,10 +80,8 @@ class PurchaseProvider with ChangeNotifier {
     try {
       final purchaseData = await _databaseService.getAllPurchases(storeId);
       _purchases = purchaseData.map((data) => Purchase.fromMap(data)).toList();
-      print('✅ Loaded ${_purchases.length} purchases for store: $storeId');
     } catch (e) {
       _error = 'Failed to load purchases: $e';
-      print('❌ Error loading purchases: $e');
     } finally {
       _setLoading(false);
     }
@@ -99,6 +100,41 @@ class PurchaseProvider with ChangeNotifier {
     _error = null;
 
     try {
+      if (kIsWeb) {
+        final purchaseId = const Uuid().v4();
+        final purchase = Purchase(
+          id: purchaseId,
+          supplierId: supplierId,
+          storeId: storeId,
+          productName: productName,
+          amount: amount,
+          purchaseDate: purchaseDate,
+          paymentMethod: paymentMethod,
+          notes: notes,
+        );
+
+        // Mobil ile aynı: belirli purchaseId ile kaydet (.add() değil — çift kayıt önlenir)
+        final success = await _firestoreService.savePurchase(
+          storeId,
+          supplierId,
+          purchaseId,
+          purchase.toFirebaseMap(),
+        );
+        if (!success) {
+          throw Exception('Alışveriş Firestore\'a kaydedilemedi');
+        }
+
+        await _updateSupplierPurchaseTotalsWeb(
+          storeId,
+          supplierId,
+          amount,
+          add: true,
+        );
+
+        // Listeyi stream günceller; burada ekleme yapma (çift satır oluşuyordu)
+        return purchaseId;
+      }
+
       final purchaseData = {
         'supplier_id': supplierId,
         'store_id': storeId,
@@ -112,19 +148,47 @@ class PurchaseProvider with ChangeNotifier {
       final purchaseId = await _databaseService.createPurchase(purchaseData);
 
       if (purchaseId != null) {
-        // Reload purchases to reflect changes
-        await loadPurchasesBySupplier(supplierId);
-        print('✅ Purchase created successfully: $purchaseId');
+        await loadPurchasesBySupplier(supplierId, storeId: storeId);
         return purchaseId;
       } else {
         throw Exception('Failed to create purchase');
       }
     } catch (e) {
       _error = 'Failed to create purchase: $e';
-      print('❌ Error creating purchase: $e');
       notifyListeners();
       return null;
     }
+  }
+
+  Future<void> _updateSupplierPurchaseTotalsWeb(
+    String storeId,
+    String supplierId,
+    double amount, {
+    required bool add,
+  }) async {
+    final doc = await _firestoreService.getSupplier(storeId, supplierId);
+    if (doc == null || !doc.exists) return;
+
+    final data = doc.data() as Map<String, dynamic>;
+    data['id'] = doc.id;
+    final supplier = Supplier.fromMap(data);
+    final delta = add ? amount : -amount;
+
+    final updated = supplier.copyWith(
+      totalPurchases:
+          (supplier.totalPurchases + delta).clamp(0, double.infinity),
+      monthlyPurchases:
+          (supplier.monthlyPurchases + delta).clamp(0, double.infinity),
+      yearlyPurchases:
+          (supplier.yearlyPurchases + delta).clamp(0, double.infinity),
+      updatedAt: DateTime.now(),
+    );
+
+    await _firestoreService.saveSupplier(
+      storeId,
+      updated.id,
+      updated.toFirebaseMap(),
+    );
   }
 
   /// Update existing purchase
@@ -140,12 +204,9 @@ class PurchaseProvider with ChangeNotifier {
         _purchases[index] = purchase;
         notifyListeners();
       }
-
-      print('✅ Purchase updated successfully: ${purchase.id}');
       return true;
     } catch (e) {
       _error = 'Failed to update purchase: $e';
-      print(' updating purchase: $e');
       notifyListeners();
       return false;
     }
@@ -161,12 +222,9 @@ class PurchaseProvider with ChangeNotifier {
       // Remove from local list
       _purchases.removeWhere((p) => p.id == purchaseId);
       notifyListeners();
-
-      print('✅ Purchase deleted successfully: $purchaseId');
       return true;
     } catch (e) {
       _error = 'Failed to delete purchase: $e';
-      print('❌ Error deleting purchase: $e');
       notifyListeners();
       return false;
     }
@@ -199,18 +257,14 @@ class PurchaseProvider with ChangeNotifier {
     try {
       _firestoreService.getAllPurchasesStream(storeId).listen(
         (snapshot) {
-          print(
-              '🔄 Firebase purchases update received: ${snapshot.docs.length} documents');
           _handleFirebasePurchaseUpdate(snapshot.docs);
         },
         onError: (error) {
-          print('❌ Firebase purchases stream error: $error');
           _error = 'Firebase sync error: $error';
           notifyListeners();
         },
       );
     } catch (e) {
-      print('❌ Error starting Firebase purchase listener: $e');
     }
   }
 
@@ -226,11 +280,7 @@ class PurchaseProvider with ChangeNotifier {
       // Update local list with Firebase data
       _purchases = firebasePurchases;
       notifyListeners();
-
-      print(
-          '✅ Purchases synced from Firebase: ${firebasePurchases.length} items');
     } catch (e) {
-      print('❌ Error handling Firebase purchase update: $e');
     }
   }
 
@@ -239,25 +289,19 @@ class PurchaseProvider with ChangeNotifier {
     _firebaseListener?.cancel(); // Önceki listener'ı iptal et
 
     try {
-      print(
-          '🔄 Starting Firebase listener for supplier: $supplierId, store: $storeId');
 
       _firebaseListener =
           _firestoreService.getPurchasesStream(storeId, supplierId).listen(
         (snapshot) {
-          print(
-              '🔄 Firebase purchase update received: ${snapshot.docs.length} documents for supplier: $supplierId');
           _handleFirebaseSupplierPurchaseUpdate(
               snapshot.docs, supplierId, storeId);
         },
         onError: (error) {
-          print('❌ Firebase supplier purchases stream error: $error');
           _error = 'Firebase sync error: $error';
           notifyListeners();
         },
       );
     } catch (e) {
-      print('❌ Error starting Firebase supplier purchase listener: $e');
     }
   }
 
@@ -265,27 +309,43 @@ class PurchaseProvider with ChangeNotifier {
   void _handleFirebaseSupplierPurchaseUpdate(
       List<dynamic> docs, String supplierId, String storeId) async {
     try {
-      final firebasePurchases = docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id; // Firebase document ID
-        // Store ID'yi garantile
-        data['store_id'] = storeId;
-        data['supplier_id'] = supplierId;
-        return Purchase.fromMap(data);
-      }).toList();
+      final firebasePurchases = <Purchase>[];
+      final seenIds = <String>{};
+      for (final doc in docs) {
+        try {
+          if (!seenIds.add(doc.id)) continue;
+          final data = doc.data() as Map<String, dynamic>;
+          data['id'] = doc.id;
+          data['store_id'] = storeId;
+          data['supplier_id'] = supplierId;
+          firebasePurchases.add(Purchase.fromMap(data));
+        } catch (_) {}
+      }
 
-      // Firebase'den gelen verileri SQLite'a senkronize et
-      await _syncFirebasePurchasesToSQLite(firebasePurchases, supplierId);
+      if (!kIsWeb) {
+        await _syncFirebasePurchasesToSQLite(firebasePurchases, supplierId);
+      }
 
-      // UI'ı güncelle
-      _purchases = firebasePurchases;
+      _purchases = _dedupePurchases(firebasePurchases);
       notifyListeners();
-
-      print(
-          '✅ Supplier purchases synced from Firebase: ${firebasePurchases.length} items');
     } catch (e) {
-      print('❌ Error handling Firebase supplier purchase update: $e');
+      // ignore
     }
+  }
+
+  /// Aynı dakikada aynı ürün+tutar (eski web çift kayıt) tek satır göster
+  List<Purchase> _dedupePurchases(List<Purchase> purchases) {
+    final seen = <String>{};
+    final result = <Purchase>[];
+    for (final p in purchases) {
+      final minuteKey =
+          '${p.productName}|${p.amount}|${p.purchaseDate.year}-${p.purchaseDate.month}-${p.purchaseDate.day}-${p.purchaseDate.hour}-${p.purchaseDate.minute}';
+      if (seen.add(minuteKey)) {
+        result.add(p);
+      }
+    }
+    result.sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate));
+    return result;
   }
 
   /// Firebase verilerini SQLite'a senkronize et
@@ -303,22 +363,16 @@ class PurchaseProvider with ChangeNotifier {
           // Update mevcut purchase'ı (fromFirebase=true ile sync döngüsü önlenir)
           await _databaseService.updatePurchase(purchaseData,
               fromFirebase: true);
-          print('🔄 Attempt 1: Updating existing purchase: ${purchase.id}');
         } catch (e) {
           // Purchase yoksa create et - fromFirebase=true ile sync döngüsü önlenir
           await _databaseService.createPurchase(purchaseData,
               fromFirebase: true);
-          print('✅ Purchase created in SQLite: ${purchase.id}');
         }
       }
 
       // Firebase sync sonrası supplier totals'ı doğru hesapla
       await _recalculateSupplierTotals(supplierId, firebasePurchases);
-
-      print(
-          '✅ ${firebasePurchases.length} purchases synced to SQLite for supplier: $supplierId');
     } catch (e) {
-      print('❌ Error syncing purchases to SQLite: $e');
     }
   }
 
@@ -331,11 +385,7 @@ class PurchaseProvider with ChangeNotifier {
 
       // Supplier'ı doğru totals ile güncelle
       await _databaseService.recalculateSupplierTotals(supplierId, totalAmount);
-
-      print(
-          '🔄 Recalculated supplier totals for: $supplierId -> Total: $totalAmount');
     } catch (e) {
-      print('❌ Error recalculating supplier totals: $e');
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:uuid/uuid.dart'; // ✅ UUID generation için
 import 'dart:async';
 import '../models/supplier.dart';
@@ -27,33 +28,90 @@ class SupplierProvider extends ChangeNotifier {
   Future<void> _initializeStoreId() async {
     final storeId = await StoreSelectionService.instance.getCurrentStoreId();
     _currentStoreId = storeId;
-    notifyListeners();
+  }
+
+  Future<void> _ensureStoreId() async {
+    if (_currentStoreId == null || _currentStoreId!.isEmpty) {
+      await _initializeStoreId();
+    }
+  }
+
+  /// Tedarikçiyi listeden veya Firestore'dan getir (detay ekranı için)
+  Future<Supplier?> _resolveSupplier(String supplierId) async {
+    final index = _suppliers.indexWhere((s) => s.id == supplierId);
+    if (index != -1) return _suppliers[index];
+
+    if (kIsWeb) {
+      await _ensureStoreId();
+      final storeId = _currentStoreId ?? '';
+      if (storeId.isEmpty) return null;
+      final doc =
+          await FirestoreService.instance.getSupplier(storeId, supplierId);
+      if (doc != null && doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Supplier.fromMap(data);
+      }
+    }
+    return null;
+  }
+
+  void _upsertSupplierInList(Supplier supplier) {
+    final index = _suppliers.indexWhere((s) => s.id == supplier.id);
+    if (index != -1) {
+      _suppliers[index] = supplier;
+    } else {
+      _suppliers = [..._suppliers, supplier];
+    }
+  }
+
+  Future<void> _persistSupplier(Supplier supplier) async {
+    await _ensureStoreId();
+    final storeId = _currentStoreId ?? '';
+    if (storeId.isEmpty) {
+      throw Exception('Mağaza bulunamadı');
+    }
+
+    if (kIsWeb) {
+      final result = await FirestoreService.instance.saveSupplier(
+        storeId,
+        supplier.id,
+        supplier.toFirebaseMap(),
+      );
+      if (result == null) {
+        throw Exception('Tedarikçi Firestore\'a kaydedilemedi');
+      }
+      _upsertSupplierInList(supplier);
+      notifyListeners();
+    } else {
+      await _databaseService.updateSupplier(supplier);
+      _upsertSupplierInList(supplier);
+      notifyListeners();
+    }
   }
 
   // Initialize and load data from database
   Future<void> loadSuppliers() async {
     setLoading(true);
     try {
-      // Initialize store ID first
       await _initializeStoreId();
 
-      // ✅ Store ID ile filtrelenmiş tedarikçileri yükle
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      _suppliers = await _databaseService.getSuppliers(storeId);
-
-      // Start Firebase listener for real-time updates
-      _startFirebaseListener(storeId);
-
-      // 🔄 Sync payment history from Firebase for all suppliers
-      _syncAllSupplierPaymentHistories(storeId);
-
-      notifyListeners();
+      if (kIsWeb) {
+        // Web: SQLite yok — Firebase stream başlat, veriler _handleFirebaseUpdate ile gelir
+        _startFirebaseListener(storeId);
+      } else {
+        _suppliers = await _databaseService.getSuppliers(storeId);
+        _startFirebaseListener(storeId);
+        _syncAllSupplierPaymentHistories(storeId);
+        notifyListeners();
+      }
     } catch (e) {
-      // // Debug print removed // Removed for production
+      // hata görmezden gel
     } finally {
       setLoading(false);
     }
@@ -72,42 +130,30 @@ class SupplierProvider extends ChangeNotifier {
           .listen((snapshot) {
         _handleFirebaseUpdate(snapshot.docs);
       }, onError: (error) {
-        print('❌ Firebase supplier listener error: $error');
       });
 
       // Payment history listeners will be started per supplier as needed
       // New schema structure doesn't support global payment history listening
-      print('ℹ️  Payment history listeners will be managed per supplier');
-
-      print('✅ Firebase listeners started for store: $storeId');
     } catch (e) {
-      print('❌ Failed to start Firebase listeners: $e');
     }
   }
 
-  // Handle Firebase updates
-  void _handleFirebaseUpdate(List docs) async {
-    try {
-      print('🔍 DEBUG: Firebase docs received: ${docs.length}');
-
-      final firebaseSuppliers = docs.map((doc) {
+  // Handle Firebase updates — tek kaynak: Firestore (mobil + web aynı listeyi görür)
+  void _handleFirebaseUpdate(List docs) {
+    final firebaseSuppliers = <Supplier>[];
+    for (final doc in docs) {
+      try {
         final data = doc.data() as Map<String, dynamic>;
-        print('🔍 DEBUG: Firebase doc data: $data');
-        data['id'] = doc.id; // Firebase document ID'yi ekle
-        return Supplier.fromMap(data);
-      }).toList();
-
-      print('🔍 DEBUG: Parsed suppliers: ${firebaseSuppliers.length}');
-
-      // Update UI DIRECTLY from Firebase data
-      _suppliers = firebaseSuppliers;
-      notifyListeners();
-
-      print(
-          '✅ Suppliers synced from Firebase: ${firebaseSuppliers.length} items');
-    } catch (e) {
-      print('❌ Error handling Firebase supplier update: $e');
+        // Silinmiş / pasif kayıtları atla
+        if (data['isActive'] == false) continue;
+        data['id'] = doc.id;
+        firebaseSuppliers.add(Supplier.fromMap(data));
+      } catch (_) {
+        // Tek hatalı kayıt tüm listeyi bozmasın
+      }
     }
+    _suppliers = firebaseSuppliers;
+    notifyListeners();
   }
 
   void setLoading(bool loading) {
@@ -119,89 +165,96 @@ class SupplierProvider extends ChangeNotifier {
 
   Future<void> addSupplier(Supplier supplier) async {
     try {
-      // ✅ Store ID'sini otomatik ata
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      final supplierWithStore = supplier.copyWith(storeId: storeId);
-      await _databaseService.createSupplier(supplierWithStore);
-      // Veritabanından güncel veriyi yükle
-      await loadSuppliers();
+      final supplierId = supplier.id ?? const Uuid().v4();
+      final supplierWithStore =
+          supplier.copyWith(id: supplierId, storeId: storeId);
+
+      if (kIsWeb) {
+        // Web: Firestore'a kaydet, dönen ID ile anında listeye ekle (stream gecikmesini beklemeden)
+        final docId = await FirestoreService.instance
+            .saveSupplier(storeId, null, supplierWithStore.toFirebaseMap());
+        if (docId == null) {
+          throw Exception('Tedarikçi Firestore\'a kaydedilemedi');
+        }
+        final saved = supplierWithStore.copyWith(id: docId);
+        _suppliers = [..._suppliers, saved];
+        notifyListeners();
+      } else {
+        await _databaseService.createSupplier(supplierWithStore);
+        await loadSuppliers();
+      }
     } catch (e) {
-      // // Debug print removed // Removed for production
       rethrow;
     }
   }
 
   Future<void> updateSupplier(Supplier supplier) async {
     try {
-      print('🔄 SupplierProvider.updateSupplier başlatıldı: ${supplier.name}');
-
-      // ✅ Store ID kontrolü
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      print('🔍 DEBUG: Current Store ID: $storeId');
-      print('🔍 DEBUG: Supplier Store ID: ${supplier.storeId}');
-      print('🔍 DEBUG: Updating supplier: ${supplier.id} - ${supplier.name}');
-
-      // ✅ Supplier'a storeId'yi ekle
       final updatedSupplier = supplier.copyWith(
         storeId: storeId,
         updatedAt: DateTime.now(),
       );
 
-      print('🔄 DatabaseService.updateSupplier çağırılıyor...');
-      await _databaseService.updateSupplier(updatedSupplier);
-      print('✅ DatabaseService.updateSupplier başarılı');
-
-      final index = _suppliers.indexWhere((s) => s.id == updatedSupplier.id);
-      if (index != -1) {
-        _suppliers[index] = updatedSupplier;
-        print(
-            '✅ Local supplier listesi güncellendi, notifyListeners çağırılıyor');
+      if (kIsWeb) {
+        // Web: Firestore'da güncelle ve listeyi anında yansıt
+        final result = await FirestoreService.instance.saveSupplier(
+            storeId, updatedSupplier.id, updatedSupplier.toFirebaseMap());
+        if (result == null) {
+          throw Exception('Tedarikçi güncellenemedi');
+        }
+        final index = _suppliers.indexWhere((s) => s.id == updatedSupplier.id);
+        if (index != -1) {
+          _suppliers[index] = updatedSupplier;
+        }
         notifyListeners();
       } else {
-        print('❌ Supplier local listede bulunamadı: ${updatedSupplier.id}');
+        await _databaseService.updateSupplier(updatedSupplier);
+        final index =
+            _suppliers.indexWhere((s) => s.id == updatedSupplier.id);
+        if (index != -1) {
+          _suppliers[index] = updatedSupplier;
+          notifyListeners();
+        }
       }
-      print('✅ SupplierProvider.updateSupplier tamamlandı');
     } catch (e) {
-      print('❌ SupplierProvider.updateSupplier hatası: $e');
       rethrow;
     }
   }
 
   Future<void> removeSupplier(String supplierId) async {
     try {
-      print('🔄 SupplierProvider.removeSupplier başlatıldı: $supplierId');
-
-      // ✅ Store ID kontrolü - güvenlik için
       final storeId = _currentStoreId ?? '';
       if (storeId.isEmpty) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      // Tedarikçiyi memory'den bul
-      final supplier = _suppliers.firstWhere((s) => s.id == supplierId,
-          orElse: () => throw Exception('Tedarikçi bulunamadı'));
-
-      print('🔍 DEBUG: Deleting supplier: ${supplier.id} - ${supplier.name}');
-
-      print('🔄 DatabaseService.deleteSupplier çağırılıyor...');
-      await _databaseService.deleteSupplier(supplierId, _currentStoreId ?? '');
-      print('✅ DatabaseService.deleteSupplier başarılı');
-
-      _suppliers.removeWhere((s) => s.id == supplierId);
-      print(
-          '✅ Local supplier listesinden silindi, notifyListeners çağırılıyor');
-      notifyListeners();
-      print('✅ SupplierProvider.removeSupplier tamamlandı');
+      if (kIsWeb) {
+        // Web: Firestore'dan sil ve listeyi anında güncelle
+        final success =
+            await FirestoreService.instance.deleteSupplier(storeId, supplierId);
+        if (!success) {
+          throw Exception('Tedarikçi silinemedi');
+        }
+        _suppliers.removeWhere((s) => s.id == supplierId);
+        notifyListeners();
+      } else {
+        _suppliers.firstWhere((s) => s.id == supplierId,
+            orElse: () => throw Exception('Tedarikçi bulunamadı'));
+        await _databaseService.deleteSupplier(supplierId, storeId);
+        _suppliers.removeWhere((s) => s.id == supplierId);
+        notifyListeners();
+      }
     } catch (e) {
-      print('❌ SupplierProvider.removeSupplier hatası: $e');
       rethrow;
     }
   }
@@ -221,60 +274,48 @@ class SupplierProvider extends ChangeNotifier {
 
   Future<void> makePayment(String supplierId, double amount) async {
     try {
-      final supplierIndex = _suppliers.indexWhere((s) => s.id == supplierId);
-      if (supplierIndex != -1) {
-        final supplier = _suppliers[supplierIndex];
-        final previousDebt = supplier.debt;
-        final newDebt = supplier.debt - amount;
-        final updatedSupplier = supplier.copyWith(
-          debt: newDebt < 0 ? 0 : newDebt,
-          updatedAt: DateTime.now(),
-        );
-
-        await _databaseService.updateSupplier(updatedSupplier);
-        _suppliers[supplierIndex] = updatedSupplier;
-
-        // Payment history'e kaydet
-        await _savePaymentHistory(supplierId, 'payment', amount,
-            'Ödeme yapıldı', previousDebt, newDebt < 0 ? 0 : newDebt);
-
-        notifyListeners();
+      final supplier = await _resolveSupplier(supplierId);
+      if (supplier == null) {
+        throw Exception('Tedarikçi bulunamadı');
       }
+
+      final previousDebt = supplier.debt;
+      final newDebt = supplier.debt - amount;
+      final updatedSupplier = supplier.copyWith(
+        debt: newDebt < 0 ? 0 : newDebt,
+        updatedAt: DateTime.now(),
+      );
+
+      await _persistSupplier(updatedSupplier);
+      await _savePaymentHistory(
+        supplierId,
+        'payment',
+        amount,
+        'Ödeme yapıldı',
+        previousDebt,
+        newDebt < 0 ? 0 : newDebt,
+      );
     } catch (e) {
-      // // Debug print removed // Removed for production
       rethrow;
     }
   }
 
   Future<void> addPurchase(String supplierId, double amount) async {
     try {
-      final supplierIndex = _suppliers.indexWhere((s) => s.id == supplierId);
-      if (supplierIndex != -1) {
-        final supplier = _suppliers[supplierIndex];
-        final now = DateTime.now();
-
-        // Aylık ve yıllık alışverişleri basit toplama ile hesapla
-        // NOT: Gerçek uygulama için sales tablosundan tarih bazlı sorgu yapılmalı
-        // Şimdilik basit toplama yapıyoruz
-        double newMonthlyPurchases = supplier.monthlyPurchases + amount;
-        double newYearlyPurchases = supplier.yearlyPurchases + amount;
-
-        final updatedSupplier = supplier.copyWith(
-          totalPurchases: supplier.totalPurchases + amount,
-          monthlyPurchases: newMonthlyPurchases,
-          yearlyPurchases: newYearlyPurchases,
-          updatedAt: now,
-        );
-
-        await _databaseService.updateSupplier(updatedSupplier);
-        _suppliers[supplierIndex] = updatedSupplier;
-
-        print(
-            '✅ Purchase added: Total=${updatedSupplier.totalPurchases}, Monthly=${updatedSupplier.monthlyPurchases}, Yearly=${updatedSupplier.yearlyPurchases}');
-        notifyListeners();
+      final supplier = await _resolveSupplier(supplierId);
+      if (supplier == null) {
+        throw Exception('Tedarikçi bulunamadı');
       }
+
+      final updatedSupplier = supplier.copyWith(
+        totalPurchases: supplier.totalPurchases + amount,
+        monthlyPurchases: supplier.monthlyPurchases + amount,
+        yearlyPurchases: supplier.yearlyPurchases + amount,
+        updatedAt: DateTime.now(),
+      );
+
+      await _persistSupplier(updatedSupplier);
     } catch (e) {
-      print('❌ Error in addPurchase: $e');
       rethrow;
     }
   }
@@ -282,27 +323,28 @@ class SupplierProvider extends ChangeNotifier {
   // Borç ekleme metodu
   Future<void> addDebt(String supplierId, double amount) async {
     try {
-      final supplierIndex = _suppliers.indexWhere((s) => s.id == supplierId);
-      if (supplierIndex != -1) {
-        final supplier = _suppliers[supplierIndex];
-        final previousDebt = supplier.debt;
-        final newDebt = supplier.debt + amount;
-        final updatedSupplier = supplier.copyWith(
-          debt: newDebt,
-          updatedAt: DateTime.now(),
-        );
-
-        await _databaseService.updateSupplier(updatedSupplier);
-        _suppliers[supplierIndex] = updatedSupplier;
-
-        // Payment history'e kaydet
-        await _savePaymentHistory(
-            supplierId, 'debt', amount, 'Borç eklendi', previousDebt, newDebt);
-
-        notifyListeners();
+      final supplier = await _resolveSupplier(supplierId);
+      if (supplier == null) {
+        throw Exception('Tedarikçi bulunamadı');
       }
+
+      final previousDebt = supplier.debt;
+      final newDebt = supplier.debt + amount;
+      final updatedSupplier = supplier.copyWith(
+        debt: newDebt,
+        updatedAt: DateTime.now(),
+      );
+
+      await _persistSupplier(updatedSupplier);
+      await _savePaymentHistory(
+        supplierId,
+        'debt',
+        amount,
+        'Borç eklendi',
+        previousDebt,
+        newDebt,
+      );
     } catch (e) {
-      // // Debug print removed // Removed for production
       rethrow;
     }
   }
@@ -315,31 +357,52 @@ class SupplierProvider extends ChangeNotifier {
       String description,
       double previousDebt,
       double newDebt) async {
-    try {
-      // ✅ Firebase uyumlu STRING ID generate et
-      final uuid = Uuid();
-      final paymentId = uuid.v4();
+    await _ensureStoreId();
+    final storeId = _currentStoreId ?? '';
+    if (storeId.isEmpty) return;
 
-      final paymentData = {
-        'id': paymentId, // ✅ STRING ID eklendi
-        'supplier_id': supplierId,
-        'type': type,
-        'amount': amount,
-        'description': description,
-        'previous_debt': previousDebt,
-        'new_debt': newDebt,
-        'created_at': DateTime.now().toIso8601String(),
-      };
+    final paymentId = const Uuid().v4();
+    final createdAt = DateTime.now().toIso8601String();
 
-      // ✅ Save to SQLite first (offline-first approach)
-      await _databaseService.insert('payment_history', paymentData);
-      print('✅ Payment history saved to SQLite with STRING ID: $paymentId');
+    final firebaseData = {
+      'id': paymentId,
+      'supplierId': supplierId,
+      'type': type,
+      'amount': amount,
+      'description': description,
+      'previousDebt': previousDebt,
+      'newDebt': newDebt,
+      'created_at': createdAt,
+      'storeId': storeId,
+    };
 
-      // ✅ Sync to Firebase (non-blocking)
-      _syncPaymentHistoryToFirebase(supplierId, paymentId, paymentData);
-    } catch (e) {
-      print('❌ Error saving payment history: $e');
+    if (kIsWeb) {
+      final success = await FirestoreService.instance.savePaymentHistory(
+        storeId,
+        supplierId,
+        paymentId,
+        firebaseData,
+      );
+      if (!success) {
+        throw Exception('Ödeme geçmişi kaydedilemedi');
+      }
+      notifyListeners();
+      return;
     }
+
+    final paymentData = {
+      'id': paymentId,
+      'supplier_id': supplierId,
+      'type': type,
+      'amount': amount,
+      'description': description,
+      'previous_debt': previousDebt,
+      'new_debt': newDebt,
+      'created_at': createdAt,
+    };
+
+    await _databaseService.insert('payment_history', paymentData);
+    _syncPaymentHistoryToFirebase(supplierId, paymentId, paymentData);
   }
 
   /// Sync payment history to Firebase (private method)
@@ -349,7 +412,6 @@ class SupplierProvider extends ChangeNotifier {
       final storeId = _currentStoreId; // Use cached store ID
 
       if (storeId == null) {
-        print('❌ Cannot sync payment history: Store ID not available');
         return;
       }
 
@@ -374,13 +436,10 @@ class SupplierProvider extends ChangeNotifier {
       );
 
       if (success) {
-        print('✅ Payment history synced to Firebase: $paymentId');
       } else {
-        print('❌ Failed to sync payment history to Firebase: $paymentId');
         // TODO: Mark for pending sync retry
       }
     } catch (e) {
-      print('❌ Error syncing payment history to Firebase: $e');
       // TODO: Mark for pending sync retry
     }
   }
@@ -389,16 +448,32 @@ class SupplierProvider extends ChangeNotifier {
   Future<List<Map<String, dynamic>>> getPaymentHistory(
       String supplierId) async {
     try {
-      final storeId = currentStoreId;
-      if (storeId.isEmpty) {
-        print('❌ Store ID not available for payment history');
-        return [];
+      await _ensureStoreId();
+      final storeId = _currentStoreId ?? '';
+      if (storeId.isEmpty) return [];
+
+      if (kIsWeb) {
+        final snapshot = await FirestoreService.instance
+            .getPaymentHistory(storeId, supplierId);
+        if (snapshot == null || snapshot.docs.isEmpty) return [];
+
+        return snapshot.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return {
+            'id': doc.id,
+            'supplier_id': supplierId,
+            'type': data['type']?.toString() ?? '',
+            'amount': (data['amount'] ?? 0).toDouble(),
+            'description': data['description']?.toString() ?? '',
+            'previous_debt':
+                (data['previousDebt'] ?? data['previous_debt'] ?? 0).toDouble(),
+            'new_debt': (data['newDebt'] ?? data['new_debt'] ?? 0).toDouble(),
+            'created_at': _paymentCreatedAtString(data['created_at']),
+          };
+        }).toList();
       }
 
-      // 🔄 İlk olarak Firebase'den verileri al ve SQLite'e senkronize et
       await _syncPaymentHistoryFromFirebase(supplierId, storeId);
-
-      // 📱 SQLite'den güncel verileri döndür
       return await _databaseService.query(
         'payment_history',
         where: 'supplier_id = ?',
@@ -406,8 +481,17 @@ class SupplierProvider extends ChangeNotifier {
         orderBy: 'created_at DESC',
       );
     } catch (e) {
-      print('❌ Error getting payment history: $e');
       return [];
+    }
+  }
+
+  static String _paymentCreatedAtString(dynamic value) {
+    if (value == null) return DateTime.now().toIso8601String();
+    if (value is String) return value;
+    try {
+      return (value as dynamic).toDate().toIso8601String();
+    } catch (_) {
+      return DateTime.now().toIso8601String();
     }
   }
 
@@ -415,15 +499,11 @@ class SupplierProvider extends ChangeNotifier {
   Future<void> _syncPaymentHistoryFromFirebase(
       String supplierId, String storeId) async {
     try {
-      print(
-          '🔄 Syncing payment history from Firebase for supplier: $supplierId');
 
       final querySnapshot = await FirestoreService.instance
           .getPaymentHistory(storeId, supplierId);
 
       if (querySnapshot != null && querySnapshot.docs.isNotEmpty) {
-        print(
-            '✅ Found ${querySnapshot.docs.length} payment transactions in Firebase');
 
         for (final doc in querySnapshot.docs) {
           final data = doc.data() as Map<String, dynamic>;
@@ -451,7 +531,6 @@ class SupplierProvider extends ChangeNotifier {
           if (existing.isEmpty) {
             // Insert new transaction to SQLite
             await _databaseService.insert('payment_history', sqliteData);
-            print('✅ Payment transaction synced to SQLite: ${data['id']}');
           } else {
             // Update existing transaction if needed
             await _databaseService.update(
@@ -460,15 +539,11 @@ class SupplierProvider extends ChangeNotifier {
               where: 'id = ?',
               whereArgs: [data['id']],
             );
-            print('✅ Payment transaction updated in SQLite: ${data['id']}');
           }
         }
       } else {
-        print(
-            'ℹ️  No payment history found in Firebase for supplier: $supplierId');
       }
     } catch (e) {
-      print('❌ Error syncing payment history from Firebase: $e');
     }
   }
 
@@ -480,7 +555,6 @@ class SupplierProvider extends ChangeNotifier {
   StreamSubscription? startSupplierPaymentHistoryListener(String supplierId) {
     final storeId = currentStoreId;
     if (storeId.isEmpty) {
-      print('❌ Cannot start payment history listener: Store ID not available');
       return null;
     }
 
@@ -490,27 +564,23 @@ class SupplierProvider extends ChangeNotifier {
           .listen((snapshot) {
         _handleSupplierPaymentHistoryUpdate(supplierId, snapshot.docs);
       }, onError: (error) {
-        print(
-            '❌ Payment history listener error for supplier $supplierId: $error');
       });
     } catch (e) {
-      print(
-          '❌ Failed to start payment history listener for supplier $supplierId: $e');
       return null;
     }
   }
 
   /// Handle payment history updates for specific supplier
   void _handleSupplierPaymentHistoryUpdate(String supplierId, List docs) async {
+    if (kIsWeb) {
+      notifyListeners();
+      return;
+    }
     try {
-      print(
-          '🔍 Payment history update for supplier $supplierId: ${docs.length} transactions');
-
       for (final doc in docs) {
         final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id; // Firebase document ID'yi ekle
+        data['id'] = doc.id;
 
-        // Convert Firebase format to SQLite format
         final sqliteData = {
           'id': data['id'],
           'supplier_id': supplierId,
@@ -522,7 +592,6 @@ class SupplierProvider extends ChangeNotifier {
           'created_at': data['created_at'],
         };
 
-        // Check if transaction exists in SQLite
         final existing = await _databaseService.query(
           'payment_history',
           where: 'id = ?',
@@ -530,52 +599,38 @@ class SupplierProvider extends ChangeNotifier {
         );
 
         if (existing.isEmpty) {
-          // Insert new transaction to SQLite
           await _databaseService.insert('payment_history', sqliteData);
-          print('✅ Payment transaction synced to SQLite: ${data['id']}');
         } else {
-          // Update existing transaction if needed
           await _databaseService.update(
             'payment_history',
             sqliteData,
             where: 'id = ?',
             whereArgs: [data['id']],
           );
-          print('✅ Payment transaction updated in SQLite: ${data['id']}');
         }
       }
-
-      // Notify listeners to update UI
       notifyListeners();
     } catch (e) {
-      print(
-          '❌ Error handling payment history update for supplier $supplierId: $e');
+      // ignore
     }
   }
 
   /// Sync payment history from Firebase for all suppliers (background task)
   void _syncAllSupplierPaymentHistories(String storeId) async {
     try {
-      print(
-          '🔄 Starting background sync of payment histories for all suppliers');
 
       for (final supplier in _suppliers) {
         if (supplier.id != null) {
           // Background sync - don't await to avoid blocking UI
           _syncPaymentHistoryFromFirebase(supplier.id!, storeId)
               .catchError((e) {
-            print('❌ Background sync error for supplier ${supplier.id}: $e');
           });
 
           // Small delay to avoid overwhelming Firebase
           await Future.delayed(const Duration(milliseconds: 100));
         }
       }
-
-      print(
-          '✅ Background payment history sync initiated for ${_suppliers.length} suppliers');
     } catch (e) {
-      print('❌ Error in background payment history sync: $e');
     }
   }
 

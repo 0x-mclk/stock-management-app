@@ -25,17 +25,14 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
   @override
   void initState() {
     super.initState();
-    print('🔥🔥🔥 MY STORE SCREEN BAŞLATILDI!');
     _loadStoreInfo();
   }
 
   Future<void> _loadStoreInfo() async {
-    print('🔥🔥🔥 MAĞAZAM BİLGİLERİ YÜKLENİYOR - BAŞLADI!');
 
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null) {
-        print('🔥 Current user: ${currentUser.email}');
 
         // CRITICAL: Doğru store ID'yi al (davet edilen kullanıcılar için önemli)
         _storeId = await StoreSelectionService.instance.getCurrentStoreId();
@@ -43,8 +40,6 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
         _userEmail = currentUser.email ?? '';
         _lastLogin = currentUser.metadata.lastSignInTime;
 
-        print('🏪 Store ID: $_storeId');
-        print('🏪 Store Name: $_storeName');
 
         // User activity koleksiyonundan da mağaza adını kontrol et
         String userActivityStoreName = '';
@@ -55,19 +50,14 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
               .get();
           if (userActivityDoc.exists) {
             userActivityStoreName = userActivityDoc.data()?['storeName'] ?? '';
-            print(
-                '📊 User Activity\'den alınan mağaza adı: $userActivityStoreName');
           } else {
-            print('⚠️ User activity belgesi mevcut değil!');
           }
         } catch (e) {
-          print('⚠️ User activity\'den mağaza adı alınamadı: $e');
         }
 
         // Eğer user activity\'de mağaza adı varsa onu kullan
         if (userActivityStoreName.isNotEmpty) {
           _storeName = userActivityStoreName;
-          print('🏆 User Activity\'den mağaza adı kullanılıyor: $_storeName');
         }
 
         // Firestore'dan kullanıcı bilgilerini al
@@ -84,14 +74,9 @@ class _MyStoreScreenState extends State<MyStoreScreen> {
             _createdAt = userData['createdAt']?.toDate();
           });
 
-          print('✅ Kullanıcı bilgileri yüklendi:');
-          print('   Ad: $_userName');
-          print('   Email: $_userEmail');
-          print('   Store: $_storeName ($_storeId)');
         }
       }
     } catch (e) {
-      print('❌ Mağaza bilgileri yüklenirken hata: $e');
       // Hata durumunda varsayılan değerler kullanılır
     } finally {
       setState(() {

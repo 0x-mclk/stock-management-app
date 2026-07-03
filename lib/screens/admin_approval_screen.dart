@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/invitation_model.dart';
 import '../services/invitation_service.dart';
+import '../utils/role_display.dart';
 
 class AdminApprovalScreen extends StatefulWidget {
   final String storeId;
@@ -186,7 +187,7 @@ class _AdminApprovalScreenState extends State<AdminApprovalScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: _getRoleColor(invitation.role),
+                              color: RoleDisplay.color(invitation.role),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -286,19 +287,6 @@ class _AdminApprovalScreenState extends State<AdminApprovalScreen> {
         ),
       ),
     );
-  }
-
-  Color _getRoleColor(UserRole role) {
-    switch (role) {
-      case UserRole.owner:
-        return Colors.purple;
-      case UserRole.manager:
-        return Colors.blue;
-      case UserRole.staff:
-        return Colors.green;
-      case UserRole.partner:
-        return Colors.orange;
-    }
   }
 
   String _formatDate(DateTime date) {

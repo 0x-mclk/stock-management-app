@@ -5,6 +5,7 @@ import '../providers/purchase_provider.dart';
 
 import '../models/supplier.dart';
 import '../utils/currency_formatter.dart';
+import '../utils/web_utils.dart';
 import 'supplier_detail_screen.dart';
 
 class SuppliersScreen extends StatefulWidget {
@@ -32,131 +33,368 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = WebBreakpoints.isDesktop(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tedarikçi Yönetimi'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () => _showFilterDialog(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.business),
-            onPressed: () => _showAddSupplierDialog(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Arama ve Filtre Çubuğu
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Tedarikçi adı, telefon ara...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _searchQuery = '';
-                              });
-                            },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
-                    });
-                  },
-                ),
-                if (_selectedFilter != 'all')
-                  Container(
-                    margin: const EdgeInsets.only(top: 8),
-                    child: Chip(
-                      label: Text(_getFilterName()),
-                      onDeleted: () {
-                        setState(() {
-                          _selectedFilter = 'all';
-                        });
-                      },
-                    ),
-                  ),
-              ],
+      appBar: isDesktop ? null : _buildMobileAppBar(),
+      body: isDesktop ? _buildDesktopBody(context) : _buildMobileBody(),
+      floatingActionButton: isDesktop
+          ? null
+          : FloatingActionButton(
+              heroTag: 'suppliers_fab',
+              onPressed: () => _showAddSupplierDialog(),
+              child: const Icon(Icons.business),
             ),
-          ),
+    );
+  }
 
-          // Tedarikçi Listesi
-          Expanded(
-            child: Consumer<SupplierProvider>(
-              builder: (context, supplierProvider, child) {
-                var filteredSuppliers = supplierProvider.suppliers
-                    .where((supplier) =>
-                        supplier.name
-                            .toLowerCase()
-                            .contains(_searchQuery.toLowerCase()) ||
-                        (supplier.phone?.contains(_searchQuery) ?? false))
-                    .toList();
+  PreferredSizeWidget _buildMobileAppBar() {
+    return AppBar(
+      title: const Text('Tedarikçi Yönetimi'),
+      actions: [
+        IconButton(
+            icon: const Icon(Icons.filter_list),
+            onPressed: () => _showFilterDialog()),
+        IconButton(
+            icon: const Icon(Icons.business),
+            onPressed: () => _showAddSupplierDialog()),
+      ],
+    );
+  }
 
-                // Borç durumuna göre filtrele
-                if (_selectedFilter == 'debt') {
-                  filteredSuppliers =
-                      filteredSuppliers.where((s) => s.debt > 0).toList();
-                } else if (_selectedFilter == 'no_debt') {
-                  filteredSuppliers =
-                      filteredSuppliers.where((s) => s.debt == 0).toList();
-                }
+  // ─── Desktop Body ───────────────────────────────────────────────────────────
+  Widget _buildDesktopBody(BuildContext context) {
+    return Consumer<SupplierProvider>(
+      builder: (context, supplierProvider, _) {
+        final all = supplierProvider.suppliers;
+        final totalDebt =
+            all.fold<double>(0, (sum, s) => sum + s.debt);
+        final debtCount = all.where((s) => s.debt > 0).length;
 
-                if (filteredSuppliers.isEmpty) {
-                  return const Center(
+        return WebPageWrapper(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  const Expanded(
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.business_outlined,
-                            size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
                         Text(
-                          'Henüz tedarikçi bulunmuyor',
-                          style: TextStyle(fontSize: 18, color: Colors.grey),
+                          'Tedarikçi Yönetimi',
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.5,
+                          ),
                         ),
-                        SizedBox(height: 8),
+                        SizedBox(height: 4),
                         Text(
-                          'Yeni tedarikçi eklemek için + butonuna dokunun',
-                          style: TextStyle(color: Colors.grey),
+                          'Tedarikçilerinizi ve borçlarınızı takip edin',
+                          style: TextStyle(fontSize: 13, color: Colors.grey),
                         ),
                       ],
                     ),
-                  );
-                }
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => _showAddSupplierDialog(),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Yeni Tedarikçi'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
 
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12), // Azaltıldı (16'dan 12'ye)
-                  itemCount: filteredSuppliers.length,
-                  itemBuilder: (context, index) {
-                    final supplier = filteredSuppliers[index];
-                    return _buildSupplierCard(supplier);
-                  },
-                );
-              },
+              // Summary cards
+              Row(
+                children: [
+                  _SummaryStatCard(
+                    label: 'Toplam Tedarikçi',
+                    value: '${all.length}',
+                    icon: Icons.business_rounded,
+                    color: Colors.blue,
+                  ),
+                  const SizedBox(width: 12),
+                  _SummaryStatCard(
+                    label: 'Borçlu Tedarikçi',
+                    value: '$debtCount',
+                    icon: Icons.warning_amber_rounded,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(width: 12),
+                  _SummaryStatCard(
+                    label: 'Toplam Borç',
+                    value: CurrencyFormatter.formatWithSymbol(totalDebt),
+                    icon: Icons.account_balance_rounded,
+                    color: totalDebt > 0 ? Colors.red : Colors.green,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Toolbar
+              Row(
+                children: [
+                  SizedBox(
+                    width: 320,
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Tedarikçi adı, telefon ara...',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        isDense: true,
+                      ),
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  _FilterChipRow(
+                    selected: _selectedFilter,
+                    onChanged: (v) => setState(() => _selectedFilter = v),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // DataTable
+              Expanded(child: _buildSupplierDataTable(supplierProvider)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSupplierDataTable(SupplierProvider supplierProvider) {
+    var suppliers = supplierProvider.suppliers
+        .where((s) =>
+            s.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            (s.phone?.contains(_searchQuery) ?? false))
+        .toList();
+
+    if (_selectedFilter == 'debt') {
+      suppliers = suppliers.where((s) => s.debt > 0).toList();
+    } else if (_selectedFilter == 'no_debt') {
+      suppliers = suppliers.where((s) => s.debt == 0).toList();
+    }
+
+    if (suppliers.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.business_outlined,
+                size: 56, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text(
+              _searchQuery.isEmpty
+                  ? 'Henüz tedarikçi eklenmemiş'
+                  : '"$_searchQuery" için sonuç yok',
+              style: const TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor:
+                  WidgetStateProperty.all(Colors.grey.shade50),
+              headingTextStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: Colors.black87,
+              ),
+              dataTextStyle: const TextStyle(fontSize: 13),
+              columnSpacing: 24,
+              horizontalMargin: 20,
+              columns: const [
+                DataColumn(label: Text('Tedarikçi Adı')),
+                DataColumn(label: Text('Telefon')),
+                DataColumn(label: Text('E-posta')),
+                DataColumn(label: Text('Borç'), numeric: true),
+                DataColumn(label: Text('Toplam Alım'), numeric: true),
+                DataColumn(label: Text('İşlemler')),
+              ],
+              rows: suppliers.map((s) {
+                return DataRow(cells: [
+                  DataCell(
+                    Text(s.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w500)),
+                    onTap: () => _openSupplierDetail(s),
+                  ),
+                  DataCell(Text(s.phone ?? '—')),
+                  DataCell(Text(s.email ?? '—')),
+                  DataCell(
+                    Text(
+                      CurrencyFormatter.formatWithSymbol(s.debt),
+                      style: TextStyle(
+                        color: s.debt > 0 ? Colors.red : Colors.green,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  DataCell(Text(CurrencyFormatter.formatWithSymbol(
+                      s.totalPurchases))),
+                  DataCell(Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.visibility_rounded,
+                            size: 18, color: Colors.blue),
+                        tooltip: 'Detay',
+                        onPressed: () => _openSupplierDetail(s),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(Icons.edit_rounded,
+                            size: 18, color: Colors.grey),
+                        tooltip: 'Düzenle',
+                        onPressed: () => _showEditSupplierDialog(s),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(Icons.delete_rounded,
+                            size: 18, color: Colors.red),
+                        tooltip: 'Sil',
+                        onPressed: () => _showDeleteConfirmation(s),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  )),
+                ]);
+              }).toList(),
             ),
           ),
-        ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: "suppliers_fab",
-        onPressed: () => _showAddSupplierDialog(),
-        child: const Icon(Icons.business),
-      ),
+    );
+  }
+
+  void _openSupplierDetail(Supplier supplier) {
+    showWebPanel(
+      context: context,
+      child: SupplierDetailScreen(supplier: supplier),
+      panelWidth: 720,
+    );
+  }
+
+  // ─── Mobile Body ────────────────────────────────────────────────────────────
+  Widget _buildMobileBody() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Tedarikçi adı, telefon ara...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onChanged: (v) => setState(() => _searchQuery = v),
+              ),
+              if (_selectedFilter != 'all')
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  child: Chip(
+                    label: Text(_getFilterName()),
+                    onDeleted: () =>
+                        setState(() => _selectedFilter = 'all'),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Consumer<SupplierProvider>(
+            builder: (context, supplierProvider, _) {
+              var filtered = supplierProvider.suppliers
+                  .where((s) =>
+                      s.name
+                          .toLowerCase()
+                          .contains(_searchQuery.toLowerCase()) ||
+                      (s.phone?.contains(_searchQuery) ?? false))
+                  .toList();
+              if (_selectedFilter == 'debt') {
+                filtered = filtered.where((s) => s.debt > 0).toList();
+              } else if (_selectedFilter == 'no_debt') {
+                filtered = filtered.where((s) => s.debt == 0).toList();
+              }
+              if (filtered.isEmpty) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.business_outlined,
+                          size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text('Henüz tedarikçi bulunmuyor',
+                          style:
+                              TextStyle(fontSize: 18, color: Colors.grey)),
+                      SizedBox(height: 8),
+                      Text(
+                          'Yeni tedarikçi eklemek için + butonuna dokunun',
+                          style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                );
+              }
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: filtered.length,
+                itemBuilder: (context, i) =>
+                    _buildSupplierCard(filtered[i]),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -521,7 +759,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             child: const Text('İptal'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (nameController.text.trim().isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -550,21 +788,33 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                 storeId: '', // ✅ Provider otomatik atayacak
               );
 
-              if (isEditing) {
-                context.read<SupplierProvider>().updateSupplier(newSupplier);
-              } else {
-                context.read<SupplierProvider>().addSupplier(newSupplier);
+              try {
+                if (isEditing) {
+                  await context.read<SupplierProvider>().updateSupplier(newSupplier);
+                } else {
+                  await context.read<SupplierProvider>().addSupplier(newSupplier);
+                }
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(isEditing
+                          ? 'Tedarikçi güncellendi'
+                          : 'Tedarikçi eklendi'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Hata: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
-
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(isEditing
-                      ? 'Tedarikçi güncellendi'
-                      : 'Tedarikçi eklendi'),
-                  backgroundColor: Colors.green,
-                ),
-              );
             },
             child: Text(isEditing ? 'Güncelle' : 'Ekle'),
           ),
@@ -658,7 +908,6 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           backgroundColor: Colors.red,
         ),
       );
-      print('❌ Error saving purchase: $e');
     }
 
     // SalesProvider'a ekle
@@ -858,6 +1107,102 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Web-only helper widgets
+// ─────────────────────────────────────────────
+class _SummaryStatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _SummaryStatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterChipRow extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  const _FilterChipRow(
+      {required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const filters = [
+      ('all', 'Tümü'),
+      ('debt', 'Borçlu'),
+      ('no_debt', 'Borçsuz'),
+    ];
+    return Row(
+      children: filters.map((f) {
+        final isSelected = selected == f.$1;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: FilterChip(
+            label: Text(f.$2),
+            selected: isSelected,
+            onSelected: (_) => onChanged(f.$1),
+          ),
+        );
+      }).toList(),
     );
   }
 }

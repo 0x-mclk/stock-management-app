@@ -33,8 +33,6 @@ class FirebaseSyncService {
   Future<String> _getStoreCollectionPath(String collection) async {
     final storeId = await StoreSelectionService.instance.getCurrentStoreId();
     if (storeId.isEmpty) throw Exception('Store ID bulunamadı');
-
-    print('🔄 Firebase Sync - Store ID: $storeId, Collection: $collection');
     return 'stores/$storeId/$collection';
   }
 
@@ -76,8 +74,6 @@ class FirebaseSyncService {
       final storeCollectionPath = await _getStoreCollectionPath('products');
       final productsRef = _firestore.collection(storeCollectionPath);
 
-      print('🔄 Syncing ${products.length} products to: $storeCollectionPath');
-
       for (final product in products) {
         final docRef = productsRef.doc(product.id.toString());
         final productData = {
@@ -88,13 +84,8 @@ class FirebaseSyncService {
 
         batch.set(docRef, productData);
       }
-
-      print('🚀 Committing batch with ${products.length} products...');
       await batch.commit();
-      print('✅ Products sync completed successfully!');
     } catch (e, stackTrace) {
-      print('❌ ERROR in _syncProductsToFirebase: $e');
-      print('📍 Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -105,7 +96,6 @@ class FirebaseSyncService {
     final currentStoreId =
         await StoreSelectionService.instance.getCurrentStoreId();
     if (currentStoreId.isEmpty) {
-      print('❌ Cannot sync sales: No current store ID');
       return;
     }
 
@@ -117,14 +107,9 @@ class FirebaseSyncService {
     final storeCollectionPath = await _getStoreCollectionPath('sales');
     final salesRef = _firestore.collection(storeCollectionPath);
 
-    print(
-        '🔄 Syncing ${sales.length} sales for store $currentStoreId to: $storeCollectionPath');
-
     for (final sale in sales) {
       // ✅ Store ID doğrulaması
       if (sale.storeId != currentStoreId) {
-        print(
-            '⚠️ Skipping sale ${sale.id} - wrong store ID: ${sale.storeId} vs $currentStoreId');
         continue;
       }
 
@@ -135,14 +120,10 @@ class FirebaseSyncService {
         'localId': sale.id,
         'storeId': currentStoreId, // ✅ Explicit store ID
       };
-
-      print(
-          '🔄 Syncing sale: ${sale.id} -> ${docRef.path} for store: $currentStoreId');
       batch.set(docRef, saleData);
     }
 
     await batch.commit();
-    print('✅ Sales sync completed for store: $currentStoreId');
   }
 
   // Sync suppliers to Firebase
@@ -151,7 +132,6 @@ class FirebaseSyncService {
     final currentStoreId =
         await StoreSelectionService.instance.getCurrentStoreId();
     if (currentStoreId.isEmpty) {
-      print('❌ Cannot sync suppliers: No current store ID');
       return;
     }
 
@@ -162,14 +142,9 @@ class FirebaseSyncService {
     final storeCollectionPath = await _getStoreCollectionPath('suppliers');
     final suppliersRef = _firestore.collection(storeCollectionPath);
 
-    print(
-        '🔄 Syncing ${suppliers.length} suppliers for store $currentStoreId to: $storeCollectionPath');
-
     for (final supplier in suppliers) {
       // ✅ Store ID doğrulaması
       if (supplier.storeId != currentStoreId) {
-        print(
-            '⚠️ Skipping supplier ${supplier.id} - wrong store ID: ${supplier.storeId} vs $currentStoreId');
         continue;
       }
 
@@ -185,7 +160,6 @@ class FirebaseSyncService {
     }
 
     await batch.commit();
-    print('✅ Suppliers sync completed for store: $currentStoreId');
   }
 
   // Sync from Firebase to local database
@@ -212,16 +186,12 @@ class FirebaseSyncService {
     final storeCollectionPath = await _getStoreCollectionPath('products');
     final snapshot = await _firestore.collection(storeCollectionPath).get();
 
-    print(
-        '🔄 Syncing ${snapshot.docs.length} products from: $storeCollectionPath');
-
     // Get current store ID for filtering
     final storeId = await StoreSelectionService.instance.getCurrentStoreId();
 
     // ✅ Load existing products ONCE before the loop to prevent conflicts
     final existingProducts =
         await _dataService.loadProductsByStore(storeId, limit: null);
-    print('📊 Before sync - Local products count: ${existingProducts.length}');
 
     // Create a map for faster barcode lookup
     final Map<String, Product> existingProductsByBarcode = {
@@ -241,10 +211,7 @@ class FirebaseSyncService {
           forceNullId: true, // ⚠️ FORCE ID to be null for new products
           storeId: storeId,
         );
-        print(
-            '🆕 Adding NEW product - Firebase ID: ${product.id}, Name: ${product.name}, Barcode: ${product.barcode}');
         await _dataService.saveProduct(productWithStore);
-        print('✅ Successfully added new product: ${product.name}');
       } else {
         // Update existing product if Firebase version is newer
         final firebaseUpdatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
@@ -255,10 +222,7 @@ class FirebaseSyncService {
             id: existingProduct.id, // Use local DB ID, not Firebase ID
             storeId: storeId, // Ensure store ID is preserved
           );
-          print(
-              '🔄 Updating existing product - Local ID: ${existingProduct.id}, Firebase ID: ${product.id}, Name: ${product.name}');
           await _dataService.saveProduct(updatedProduct);
-          print('✅ Successfully updated product: ${product.name}');
         }
       }
     }
@@ -266,8 +230,6 @@ class FirebaseSyncService {
     // Log final local product count after sync
     final finalLocalProducts =
         await _dataService.loadProductsByStore(storeId, limit: null);
-    print('📊 After sync - Local products count: ${finalLocalProducts.length}');
-    print('✅ Products sync from Firebase completed');
   }
 
   // Sync sales from Firebase
@@ -275,15 +237,11 @@ class FirebaseSyncService {
     final storeCollectionPath = await _getStoreCollectionPath('sales');
     final snapshot = await _firestore.collection(storeCollectionPath).get();
 
-    print(
-        '🔄 Syncing ${snapshot.docs.length} sales from: $storeCollectionPath');
-
     // Get current store ID for validation
     final currentStoreId =
         await StoreSelectionService.instance.getCurrentStoreId();
 
     if (currentStoreId.isEmpty) {
-      print('❌ Cannot sync sales from Firebase: No current store ID');
       return;
     }
 
@@ -296,15 +254,11 @@ class FirebaseSyncService {
 
       // ✅ Store ID validasyonu ve düzeltmesi
       if (sale.storeId.isEmpty) {
-        print(
-            '⚠️ Sale without store ID, assigning current store: $currentStoreId');
         sale = sale.copyWith(storeId: currentStoreId);
       }
 
       // ✅ KRITIK: Sadece current store'a ait sales'leri işle
       if (sale.storeId != currentStoreId) {
-        print(
-            '⚠️ Skipping sale ${sale.id} from different store: ${sale.storeId} vs current: $currentStoreId');
         skippedCount++;
         continue;
       }
@@ -321,14 +275,10 @@ class FirebaseSyncService {
       if (existingSale == null) {
         // Add new sale with validated store ID
         await _dataService.saveSale(sale);
-        print('➕ Added new sale: ${sale.id} for store: ${sale.storeId}');
         syncedCount++;
       }
       // Sales usually don't get updated, so we don't need to check for updates
     }
-
-    print(
-        '✅ Sales sync from Firebase completed - Synced: $syncedCount, Skipped: $skippedCount');
   }
 
   // Sync suppliers from Firebase
@@ -336,15 +286,11 @@ class FirebaseSyncService {
     final storeCollectionPath = await _getStoreCollectionPath('suppliers');
     final snapshot = await _firestore.collection(storeCollectionPath).get();
 
-    print(
-        '🔄 Syncing ${snapshot.docs.length} suppliers from: $storeCollectionPath');
-
     // Get current store ID for validation
     final currentStoreId =
         await StoreSelectionService.instance.getCurrentStoreId();
 
     if (currentStoreId.isEmpty) {
-      print('❌ Cannot sync suppliers from Firebase: No current store ID');
       return;
     }
 
@@ -357,8 +303,6 @@ class FirebaseSyncService {
 
       // ✅ Store ID validasyonu
       if (supplier.storeId.isNotEmpty && supplier.storeId != currentStoreId) {
-        print(
-            '⚠️ Skipping supplier ${supplier.id} from different store: ${supplier.storeId} vs current: $currentStoreId');
         skippedCount++;
         continue;
       }
@@ -375,8 +319,6 @@ class FirebaseSyncService {
             ? supplier.copyWith(storeId: currentStoreId)
             : supplier;
         await _dataService.saveSupplier(supplierWithStore);
-        print(
-            '➕ Added new supplier: ${supplierWithStore.name} for store: ${supplierWithStore.storeId}');
         syncedCount++;
       } else {
         // Update existing supplier if Firebase version is newer
@@ -389,15 +331,10 @@ class FirebaseSyncService {
             storeId: currentStoreId,
           );
           await _dataService.saveSupplier(updatedSupplier);
-          print(
-              '🔄 Updated supplier: ${updatedSupplier.name} for store: ${updatedSupplier.storeId}');
           syncedCount++;
         }
       }
     }
-
-    print(
-        '✅ Suppliers sync from Firebase completed - Synced: $syncedCount, Skipped: $skippedCount');
   }
 
   // Bidirectional sync (recommended)
@@ -453,7 +390,6 @@ class FirebaseSyncService {
           await performFullSync();
         } catch (e) {
           // Log error but don't stop timer
-          print('Auto-sync error: $e');
         }
       }
     });

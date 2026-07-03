@@ -48,8 +48,6 @@ class DataService {
 
   Future<void> saveProduct(Product product) async {
     try {
-      print(
-          '💾 SAVE PRODUCT - ID: ${product.id}, Name: ${product.name}, StoreID: ${product.storeId}');
 
       if (product.id == null) {
         // ✅ Firebase uyumlu STRING ID generate et
@@ -58,17 +56,13 @@ class DataService {
 
         final productWithId = product.copyWith(id: newId);
         final productMap = productWithId.toMap();
-        print('➕ INSERTING new product with STRING ID: $newId');
 
         try {
           await _databaseService.insert('products', productMap);
-          print('✅ NEW PRODUCT inserted with STRING ID: $newId');
         } catch (e) {
           if (e
               .toString()
               .contains('UNIQUE constraint failed: products.barcode')) {
-            print(
-                '⚠️ Barcode ${product.barcode} already exists. Checking for existing product...');
 
             // Find existing product with same barcode and update it instead
             final existingProducts = await loadProducts();
@@ -77,16 +71,12 @@ class DataService {
                 .firstOrNull;
 
             if (existingProduct != null) {
-              print(
-                  '🔄 Found existing product with barcode ${product.barcode}. Updating instead...');
               final updatedProduct = product.copyWith(
                 id: existingProduct.id, // Use existing product's ID
               );
               await saveProduct(updatedProduct); // Recursive call with ID
               return;
             } else {
-              print(
-                  '❌ No existing product found with barcode ${product.barcode}, but constraint failed');
               rethrow;
             }
           } else {
@@ -95,17 +85,14 @@ class DataService {
         }
       } else {
         // Existing product - update
-        print('🔄 UPDATING existing product ID: ${product.id}');
         final result = await _databaseService.update(
           'products',
           product.toMap(),
           where: 'id = ?',
           whereArgs: [product.id],
         );
-        print('✅ UPDATED $result rows for product: ${product.name}');
       }
     } catch (e) {
-      print('❌ ERROR saving product: $e');
       rethrow;
     }
   }
@@ -179,7 +166,6 @@ class DataService {
   Future<List<Sale>> loadSalesByStore(String storeId, {int? limit}) async {
     try {
       if (storeId.isEmpty) {
-        print('⚠️ Empty store ID provided to loadSalesByStore');
         return [];
       }
 
@@ -207,18 +193,13 @@ class DataService {
 
         // ✅ Store ID doğrulaması
         if (sale.storeId != storeId) {
-          print(
-              '⚠️ Sale ${sale.id} has mismatched store ID: ${sale.storeId} vs expected: $storeId');
           continue; // Bu satışı atla
         }
 
         sales.add(sale);
       }
-
-      print('📊 Loaded ${sales.length} sales for store: $storeId');
       return sales;
     } catch (e) {
-      print('❌ Error loading sales by store: $e');
       return [];
     }
   }
@@ -246,7 +227,6 @@ class DataService {
         final saleMap = saleWithId.toMap();
 
         await _databaseService.insert('sales', saleMap);
-        print('✅ NEW SALE inserted with STRING ID: $newSaleId');
 
         // Insert sale items with STRING IDs
         for (final item in itemsToSave) {
@@ -255,7 +235,6 @@ class DataService {
           final itemMap = itemWithId.toMap();
           itemMap['sale_id'] = newSaleId;
           await _databaseService.insert('sale_items', itemMap);
-          print('✅ Sale item inserted with STRING ID: $itemId');
         }
 
         // // Debug print removed // Removed for production
@@ -282,8 +261,6 @@ class DataService {
         }
       }
     } catch (e) {
-      print('❌ DataService saveSale hatası: $e');
-      print('📝 Sale toMap: ${sale.toMap()}');
       rethrow;
     }
   }
@@ -376,8 +353,6 @@ class DataService {
         final supplierWithId = supplier.copyWith(id: newId);
         final supplierMap = supplierWithId.toMap();
         await _databaseService.insert('suppliers', supplierMap);
-
-        print('✅ New supplier saved with STRING ID: $newId');
       } else {
         await _databaseService.update(
           'suppliers',
@@ -385,10 +360,8 @@ class DataService {
           where: 'id = ?',
           whereArgs: [supplier.id],
         );
-        print('✅ Supplier updated with ID: ${supplier.id}');
       }
     } catch (e) {
-      print('❌ Supplier save error: $e');
       rethrow;
     }
   }

@@ -188,25 +188,29 @@ class InvitationModel {
         (role == UserRole.owner && permission != 'admin');
   }
 
-  /// Get role display name
+  /// Get role display name (UI: yalnızca Yönetici / Çalışan)
   String get roleDisplayName {
     switch (role) {
       case UserRole.owner:
-        return 'Mağaza Sahibi';
       case UserRole.manager:
-        return 'Müdür';
+        return 'Yönetici';
       case UserRole.staff:
-        return 'Personel';
       case UserRole.partner:
-        return 'Ortak';
+        return 'Çalışan';
     }
+  }
+
+  /// Mağaza sahibi için ek etiket
+  String? get roleSubtitle {
+    if (role == UserRole.owner) return 'Mağaza sahibi';
+    return null;
   }
 
   /// Get status display name
   String get statusDisplayName {
     switch (status) {
       case InvitationStatus.owner:
-        return 'Sahip';
+        return 'Aktif';
       case InvitationStatus.accepted:
         return 'Kabul Edildi';
       case InvitationStatus.invited:

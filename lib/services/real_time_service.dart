@@ -40,9 +40,7 @@ class RealTimeService {
               finalStoreName = 'Mağaza';
             }
           }
-          print('🏪 Store name for single user activity: $finalStoreName');
         } catch (e) {
-          print('⚠️ Could not get store name for single user activity: $e');
         }
       }
 
@@ -63,11 +61,7 @@ class RealTimeService {
           .collection('user_activity')
           .doc('${storeId}_$userId')
           .set(data, SetOptions(merge: true));
-
-      print(
-          '🔄 User activity updated: $userId for store: $storeId with store name: $finalStoreName');
     } catch (e) {
-      print('❌ Error updating user activity: $e');
     }
   }
 
@@ -92,9 +86,7 @@ class RealTimeService {
               finalStoreName = 'Mağaza';
             }
           }
-          print('🏪 Store name for user activity: $finalStoreName');
         } catch (e) {
-          print('⚠️ Could not get store name for user activity: $e');
         }
       }
 
@@ -121,28 +113,39 @@ class RealTimeService {
       }
 
       await batch.commit();
-      print(
-          '🔄 Batch updated ${users.length} users activity for store: $storeId with store name: $finalStoreName');
     } catch (e) {
-      print('❌ Error in batch update: $e');
     }
   }
 
-  /// Get stream of active users for a store
+  /// Get stream of active users for a store.
+  /// Uses a per-store cache to throttle Firestore events (max 1 rebuild / 10 s).
+  final Map<String, StreamController<List<Map<String, dynamic>>>>
+      _activityControllers = {};
+  final Map<String, StreamSubscription<QuerySnapshot>> _activitySubs = {};
+  final Map<String, DateTime> _activityLastEmit = {};
+
   Stream<List<Map<String, dynamic>>> getUserActivityStream(String storeId) {
-    print('🔍 getUserActivityStream başlatıldı: StoreID = $storeId');
-    try {
-      return _firestore
+    if (!_activityControllers.containsKey(storeId)) {
+      final ctrl =
+          StreamController<List<Map<String, dynamic>>>.broadcast();
+      _activityControllers[storeId] = ctrl;
+
+      _activitySubs[storeId] = _firestore
           .collection('user_activity')
           .where('storeId', isEqualTo: storeId)
           .where('isActive', isEqualTo: true)
           .snapshots()
-          .map((snapshot) {
-        print('📊 User Activity snapshot: ${snapshot.docs.length} doküman');
+          .listen((snapshot) {
+        final now = DateTime.now();
+        final last = _activityLastEmit[storeId];
+        if (last != null &&
+            now.difference(last).inSeconds < 10) {
+          return; // throttle — en fazla 10 sn'de 1 kez emit et
+        }
+        _activityLastEmit[storeId] = now;
 
         final users = snapshot.docs.map((doc) {
-          final data = doc.data();
-          print('📄 Activity doküman: ${doc.id}, data: $data');
+          final data = doc.data() as Map<String, dynamic>;
           return {
             'userId': data['userId'],
             'storeId': data['storeId'],
@@ -153,13 +156,12 @@ class RealTimeService {
           };
         }).toList();
 
-        print('👥 User Activity sonuç: ${users.length} kullanıcı');
-        return users;
+        if (!ctrl.isClosed) ctrl.add(users);
+      }, onError: (e) {
+        if (!ctrl.isClosed) ctrl.add([]);
       });
-    } catch (e) {
-      print('❌ getUserActivityStream hatası: $e');
-      return Stream.value([]);
     }
+    return _activityControllers[storeId]!.stream;
   }
 
   /// Clean up incorrect user activity records
@@ -175,9 +177,6 @@ class RealTimeService {
           .where('storeId', isEqualTo: storeId)
           .get();
 
-      print(
-          '🔍 Store $storeId için ${activityDocs.docs.length} user activity kaydı bulundu');
-
       // Yanlış kayıtları sil
       for (final doc in activityDocs.docs) {
         final data = doc.data();
@@ -188,15 +187,11 @@ class RealTimeService {
         if (recordUserId != correctUserId &&
             recordEmail.isNotEmpty &&
             recordEmail != correctEmail) {
-          print(
-              '❌ Yanlış user activity kaydı siliniyor: $recordEmail (${doc.id})');
           await doc.reference.delete();
         } else {
-          print('✅ Doğru user activity kaydı korunuyor: $recordUserId');
         }
       }
     } catch (e) {
-      print('❌ Error cleaning up user activities: $e');
     }
   }
 
@@ -208,7 +203,6 @@ class RealTimeService {
     String? role,
   }) async {
     try {
-      print('🔄 FORCE updating user activity with correct store name');
 
       // Firebase'den mağaza adını al
       String storeName = 'Mağaza';
@@ -221,9 +215,7 @@ class RealTimeService {
             storeName = 'Mağaza';
           }
         }
-        print('🏪 FORCE update - Firebase den alınan mağaza adı: $storeName');
       } catch (e) {
-        print('⚠️ FORCE update - Could not get store name: $e');
       }
 
       final data = {
@@ -242,11 +234,7 @@ class RealTimeService {
           .collection('user_activity')
           .doc('${storeId}_$userId')
           .set(data, SetOptions(merge: true));
-
-      print(
-          '✅ FORCE updated user activity: $userId for store: $storeId with store name: $storeName');
     } catch (e) {
-      print('❌ Error in force update: $e');
     }
   }
 
